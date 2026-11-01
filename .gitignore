@@ -1,0 +1,9 @@
+lan-desktop/node_modules/
+lan-desktop/noVNC-*/
+lan-desktop/*.msi
+lan-desktop/*.zip
+lan-desktop/*.key
+lan-desktop/*.crt
+lan-desktop/credentials.txt
+lan-desktop/download-page.html
+lan-desktop/*.log

@@ -1,0 +1,13 @@
+{
+  "name": "home-lan-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local-network HTTPS gateway for the Windows desktop",
+  "scripts": {
+    "start": "node server.cjs",
+    "verify": "node verify.cjs"
+  },
+  "dependencies": {
+    "ws": "8.22.1"
+  }
+}
