@@ -4,7 +4,7 @@ Browser access to this Windows Home computer over the local network.
 
 Open **https://192.168.0.12:8443** from a device on the same Wi-Fi/LAN. The locally issued HTTPS certificate produces a browser warning: confirm the address before continuing. Enter the desktop password from `lan-desktop/credentials.txt` on the host computer. This password is separate from the Windows sign-in password.
 
-The browser enables a dot cursor when Windows does not provide a visible pointer. For an existing browser session, enable **Settings → Show Dot when No Cursor** or open `/vnc.html?autoconnect=1&resize=scale&show_dot=1&path=websockify`.
+The browser enables a dot cursor when Windows does not provide a visible pointer. For an existing browser session, enable **Settings → Show Dot when No Cursor** or reopen the main URL. The main URL selects LAN settings: quality 4/9 and compression 1/9. These favor responsiveness over fine image detail. Browser scaling does not change the physical display resolution.
 
 ## How it works
 
@@ -21,14 +21,27 @@ cd lan-desktop
 .\prepare.ps1
 ```
 
-Then run `setup.ps1` from an administrator PowerShell. It installs the signed TightVNC server, generates passwords, limits VNC connections to loopback, adds a firewall rule for TCP 8443 from `192.168.0.0/24`, and registers the gateway as a Windows startup task. Keep the folder in its installed location. The Windows desktop service and HTTPS gateway start automatically after reboot. The computer must be awake.
+Then run `setup.ps1` from an administrator PowerShell. It installs the signed TightVNC server, generates passwords, limits VNC connections to loopback, adds a firewall rule for TCP 8443 from `192.168.0.0/24`, and applies `optimize.ps1` to configure performance and startup. Keep the folder in its installed location. Both components start at boot without requiring an interactive sign-in. Windows' PIN/password remains required to unlock the desktop.
 
 ```powershell
 .\setup.ps1
 node .\verify.cjs
 ```
 
-Run setup once: rerunning it rotates passwords and reinstalls server configuration. The verification checks the HTTPS page and performs a password-authenticated VNC handshake through WebSockets, reporting the desktop dimensions. It does not move the mouse or type on the desktop. A test from a second LAN device is still required to verify that device's network path.
+Run setup once: rerunning it rotates passwords and reinstalls server configuration. To tune an existing installation without rotating passwords, run `optimize.ps1` as administrator instead. The verification checks the HTTPS page and authenticates VNC through WebSockets, then waits up to 15 seconds for non-black screen pixels. VNC can send an initial black placeholder during capture startup, so a single black frame does not establish a capture failure. The check reports startup timing, not ongoing frame rate, and sends no keyboard/mouse input. A real all-black screen can make the pixel check time out. A second LAN device is still required to verify that device's network path and perceived responsiveness.
+
+## Performance and unattended access
+
+The `working-vnc-baseline` tag preserves the confirmed working version before tuning. No new runtime dependencies were added by the tuning.
+
+- Software capture stays enabled because it resolved this computer's black screen. Its fallback screen-polling interval is 100 ms, down from the documented default of 1000 ms. This increases capture activity and can use more CPU; it is not a guarantee of a particular frame rate. See [TightVNC's polling option](https://www.tightvnc.com/doc/win/TightVNC-installer-2.5.2.pdf).
+- Browser defaults use quality 4 and compression 1. Existing URLs with explicit quality/compression override these defaults. Reopen the main URL after applying the settings.
+- The gateway disables TCP delay for small messages, uses stream backpressure, and leaves WebSocket compression disabled because VNC already compresses its updates. Screen resolution and Windows visual effects are unchanged.
+- TightVNC uses automatic startup and service recovery after failures. The gateway is a SYSTEM startup task with no execution time limit, catch-up startup enabled, and up to 999 restart attempts at one-minute intervals. It can run without a signed-in user.
+- While plugged in, idle sleep and hibernation are disabled. Battery sleep settings, display timeout, lid-close behavior, Windows sign-in, and existing network restrictions are unchanged. Keep the machine powered and connected to the LAN; a shutdown, sleep caused by another action, or network loss makes it unreachable. Boot and recovery configuration were inspected; an actual reboot was not performed during setup.
+- Reserve `192.168.0.12` in the router for a stable URL. DHCP can otherwise change the address. Router settings are not modified by this project.
+
+`optimize.ps1` saves the previous capture registry values, active power-plan sleep values, and gateway task XML in local `diagnostics-*` files, excluded from Git. `optimize.ps1 -Restore` restores those saved registry/power/task settings; it does not revert the gateway source, browser assets, or VNC recovery policy. For the earlier browser quality, use `quality=6&compression=2` in the URL. The Git tag can be used to review or restore the earlier source.
 
 ## Access and maintenance
 

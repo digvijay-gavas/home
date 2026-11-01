@@ -8,4 +8,5 @@ lan-desktop/credentials.txt
 lan-desktop/download-page.html
 lan-desktop/*.log
 lan-desktop/diagnostics*.json
+lan-desktop/diagnostics*.xml
 lan-desktop/diagnostics*.json

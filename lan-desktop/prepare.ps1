@@ -7,6 +7,7 @@ Invoke-WebRequest 'https://github.com/novnc/noVNC/archive/refs/tags/v1.6.0.zip' 
 Expand-Archive "$PSScriptRoot\novnc.zip" $PSScriptRoot -Force
 $uiPath = "$PSScriptRoot\noVNC-1.6.0\app\ui.js"
 $uiSource = [System.IO.File]::ReadAllText($uiPath).Replace("UI.initSetting('show_dot', false);", "UI.initSetting('show_dot', true);")
+$uiSource = $uiSource.Replace("UI.initSetting('quality', 6);", "UI.initSetting('quality', 4);").Replace("UI.initSetting('compression', 2);", "UI.initSetting('compression', 1);")
 [System.IO.File]::WriteAllText($uiPath, $uiSource)
 & npm.cmd ci --omit=dev --no-audit --no-fund
 if ($LASTEXITCODE -ne 0) {throw 'Dependency installation failed.'}

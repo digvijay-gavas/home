@@ -18,4 +18,5 @@ $settings = New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-T
 Register-ScheduledTask -TaskName 'LAN Browser Desktop' -Action $action -Trigger $trigger -Settings $settings -User SYSTEM -RunLevel Highest -Force | Out-Null
 Start-Service tvnserver
 Start-ScheduledTask -TaskName 'LAN Browser Desktop'
+& "$base\optimize.ps1"
 Write-Output 'Setup complete. Credentials saved in credentials.txt.'
