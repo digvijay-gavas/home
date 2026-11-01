@@ -5,6 +5,9 @@ $signature = Get-AuthenticodeSignature "$PSScriptRoot\tightvnc.msi"
 if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'OOO GlavSoft') {throw 'TightVNC installer signature verification failed.'}
 Invoke-WebRequest 'https://github.com/novnc/noVNC/archive/refs/tags/v1.6.0.zip' -OutFile "$PSScriptRoot\novnc.zip"
 Expand-Archive "$PSScriptRoot\novnc.zip" $PSScriptRoot -Force
+$uiPath = "$PSScriptRoot\noVNC-1.6.0\app\ui.js"
+$uiSource = [System.IO.File]::ReadAllText($uiPath).Replace("UI.initSetting('show_dot', false);", "UI.initSetting('show_dot', true);")
+[System.IO.File]::WriteAllText($uiPath, $uiSource)
 & npm.cmd ci --omit=dev --no-audit --no-fund
 if ($LASTEXITCODE -ne 0) {throw 'Dependency installation failed.'}
 $openssl = 'C:\Program Files\Git\usr\bin\openssl.exe'

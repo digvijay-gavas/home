@@ -9,7 +9,7 @@ const server = https.createServer({key: fs.readFileSync(path.join(__dirname,'ser
   if (!allowed(req.socket.remoteAddress)) { res.writeHead(403); return res.end(); }
   let url;
   try { url = decodeURIComponent(new URL(req.url,'https://localhost').pathname); } catch { res.writeHead(400); return res.end(); }
-  if (url === '/') {res.writeHead(302,{Location:'/vnc.html?autoconnect=1&resize=scale&path=websockify'});return res.end();}
+  if (url === '/') {res.writeHead(302,{Location:'/vnc.html?autoconnect=1&resize=scale&show_dot=1&path=websockify'});return res.end();}
   const file = path.resolve(root,'.'+url);
   if (!file.startsWith(root+path.sep)) {res.writeHead(403);return res.end();}
   fs.readFile(file,(err,data)=>{if(err){res.writeHead(404);return res.end();}res.writeHead(200,{'Content-Type':({'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.json':'application/json'})[path.extname(file)]||'application/octet-stream','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(data);});

@@ -4,6 +4,8 @@ Browser access to this Windows Home computer over the local network.
 
 Open **https://192.168.0.12:8443** from a device on the same Wi-Fi/LAN. The locally issued HTTPS certificate produces a browser warning: confirm the address before continuing. Enter the desktop password from `lan-desktop/credentials.txt` on the host computer. This password is separate from the Windows sign-in password.
 
+The browser enables a dot cursor when Windows does not provide a visible pointer. For an existing browser session, enable **Settings → Show Dot when No Cursor** or open `/vnc.html?autoconnect=1&resize=scale&show_dot=1&path=websockify`.
+
 ## How it works
 
 The browser runs noVNC. A small Node HTTPS/WebSocket gateway forwards its connection to TightVNC on loopback port 5900. TightVNC shares and controls the actual Windows desktop, including on Windows Home. No cloud service, account, Docker, Python, or port forwarding is needed at runtime.
@@ -36,5 +38,6 @@ Run setup once: rerunning it rotates passwords and reinstalls server configurati
 - The certificate expires after 365 days. Renew it locally and restart the `LAN Browser Desktop` scheduled task.
 - `Stop-ScheduledTask -TaskName 'LAN Browser Desktop'` stops browser access. `Start-ScheduledTask -TaskName 'LAN Browser Desktop'` restarts it. These commands may require administrator rights.
 - Run `lan-desktop/uninstall.ps1` as administrator to remove the task, firewall rule, and TightVNC. This assumes TightVNC was installed by this project.
+- If authentication succeeds but the image stays black, run `lan-desktop/repair-capture.ps1` as administrator and reconnect. It disables D3D and mirror-driver capture, saving the previous values locally. Use `-Restore` to restore them. Authentication and Windows sign-in settings are unchanged.
 
 Upstream projects: [TightVNC](https://www.tightvnc.com/), [noVNC](https://github.com/novnc/noVNC), [ws](https://github.com/websockets/ws). Their licenses apply to downloaded components; their binaries and source trees are not committed here.
