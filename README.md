@@ -45,6 +45,12 @@ The `working-vnc-baseline` tag preserves the confirmed working version before tu
 
 ## Access and maintenance
 
+After installation, run the existing verification from the repository root:
+
+```powershell
+npm --prefix lan-desktop run verify
+```
+
 - Credentials and the HTTPS private key stay on the host and are excluded from Git.
 - HTTPS protects the browser connection; the VNC connection stays on loopback. VNC uses its legacy eight-character password authentication inside that encrypted connection.
 - The gateway rejects connections from outside the configured subnet. Do not forward the port on the router.
