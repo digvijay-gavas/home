@@ -14,6 +14,8 @@ audio-events/models/
 audio-events/__pycache__/
 audio-events/tests/__pycache__/
 audio-events/*.jsonl
+audio-events/*.events.sqlite3*
+audio-events/*.controls.json
 audio-events/test-audio/
 lan-desktop/diagnostics*.xml
 lan-desktop/diagnostics*.json

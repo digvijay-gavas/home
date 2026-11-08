@@ -3,7 +3,7 @@
 Independent projects in this repository:
 
 - **[lan-desktop](lan-desktop/)** — browser access to the Windows desktop over the LAN (instructions below).
-- **[audio-events](audio-events/README.md)** — offline microphone listener; saying "Hey Bobo" emits a JSON wake-word event.
+- **[audio-events](audio-events/README.md)** — offline voice triggers with command input, optional feedback popups, and a separate settings editor.
 
 Browser access to this Windows Home computer over the local network.
 

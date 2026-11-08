@@ -6,9 +6,38 @@
     {
       "id": "hey_bobo",
       "phrase": "hey bobo",
-      "event": "wake_word.detected",
+      "event": "voice_command.received",
       "min_confidence": 0.8,
-      "cooldown_seconds": 2.0
+      "cooldown_seconds": 2.0,
+      "capture_arguments": true,
+      "show_feedback": true,
+      "argument_timeout_seconds": 5.0,
+      "silence_seconds": 1.2,
+      "max_argument_seconds": 15.0
+    },
+    {
+      "id": "hey_lili",
+      "phrase": "hey lili",
+      "event": "phrase.detected",
+      "min_confidence": 0.8,
+      "cooldown_seconds": 2.0,
+      "argument_timeout_seconds": 5.0,
+      "silence_seconds": 1.2,
+      "max_argument_seconds": 15.0,
+      "capture_arguments": true,
+      "show_feedback": true
+    },
+    {
+      "id": "hey_coco",
+      "phrase": "hey coco",
+      "event": "voice_command.received",
+      "min_confidence": 0.8,
+      "cooldown_seconds": 2.0,
+      "argument_timeout_seconds": 5.0,
+      "silence_seconds": 1.2,
+      "max_argument_seconds": 15.0,
+      "capture_arguments": true,
+      "show_feedback": true
     }
   ]
 }

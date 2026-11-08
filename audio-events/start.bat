@@ -11,7 +11,7 @@ if not exist ".venv\Scripts\python.exe" (
     exit /b 1
 )
 
-".venv\Scripts\python.exe" "listener.py" %*
+".venv\Scripts\python.exe" "runtime.py" %*
 set "listener_exit=%errorlevel%"
 if not "%listener_exit%"=="0" (
     echo.

@@ -11,6 +11,20 @@ def words(text):
     return re.findall(r"[a-z0-9']+|\[unk\]", text.lower())
 
 
+def matching_phrases(result, triggers):
+    recognized = result.get("result", [])
+    tokens = [item["word"] for item in recognized]
+    for trigger in triggers:
+        phrase = words(trigger["phrase"])
+        for offset in range(len(tokens) - len(phrase) + 1):
+            if tokens[offset:offset + len(phrase)] == phrase:
+                matched = recognized[offset:offset + len(phrase)]
+                confidence = min(item.get("conf", 0) for item in matched)
+                if confidence >= trigger["min_confidence"]:
+                    yield trigger, matched, confidence
+                    break
+
+
 class EventBus:
     def __init__(self):
         self._handlers = []
