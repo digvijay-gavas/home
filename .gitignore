@@ -8,5 +8,12 @@ lan-desktop/credentials.txt
 lan-desktop/download-page.html
 lan-desktop/*.log
 lan-desktop/diagnostics*.json
+audio-events/.venv/
+audio-events/.tmp/
+audio-events/models/
+audio-events/__pycache__/
+audio-events/tests/__pycache__/
+audio-events/*.jsonl
+audio-events/test-audio/
 lan-desktop/diagnostics*.xml
 lan-desktop/diagnostics*.json

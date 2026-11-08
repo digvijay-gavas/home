@@ -1,5 +1,10 @@
 # Home
 
+Independent projects in this repository:
+
+- **[lan-desktop](lan-desktop/)** — browser access to the Windows desktop over the LAN (instructions below).
+- **[audio-events](audio-events/README.md)** — offline microphone listener; saying "Hey Bobo" emits a JSON wake-word event.
+
 Browser access to this Windows Home computer over the local network.
 
 Open **https://192.168.0.12:8443** from a device on the same Wi-Fi/LAN. The locally issued HTTPS certificate produces a browser warning: confirm the address before continuing. Enter the desktop password from `lan-desktop/credentials.txt` on the host computer. This password is separate from the Windows sign-in password.

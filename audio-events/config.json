@@ -1,0 +1,14 @@
+{
+  "model_path": "models/vosk-model-small-en-us-0.15",
+  "device": null,
+  "sample_rate": 16000,
+  "triggers": [
+    {
+      "id": "hey_bobo",
+      "phrase": "hey bobo",
+      "event": "wake_word.detected",
+      "min_confidence": 0.8,
+      "cooldown_seconds": 2.0
+    }
+  ]
+}
