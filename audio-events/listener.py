@@ -91,7 +91,7 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
     playback_idle = threading.Event()
     playback_idle.set()
     disrupted = threading.Event()
-    wake_resume = threading.Event()
+    wake_output = threading.Event()
     audio = queue.Queue(maxsize=50)
     audio_lock = threading.Lock()
     audio_slots = threading.BoundedSemaphore(8)
@@ -128,41 +128,42 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
             clip, spoken = select_wake_audio(settings) if event["reason"] == "trigger_only" else (None, None)
             spoken = spoken or select_response(settings, event)
             if clip or spoken:
-                schedule_audio(clip=clip, spoken=spoken)
+                schedule_audio(clip=clip, spoken=spoken, voice=settings.get("voice", "default"))
 
-    def schedule_audio(clip=None, spoken=None, cue=False, wake=False):
+    def schedule_audio(clip=None, spoken=None, cue=False, wake=False, voice="default"):
         nonlocal pending_playback
         if args.wav or stop_event.is_set() or not audio_slots.acquire(blocking=False):
             return None
         with audio_lock:
-            if not cue:
+            if wake:
+                if wake_output.is_set():
+                    audio_slots.release()
+                    return None
+                wake_output.set()
+            else:
                 pending_playback += 1
                 playing.set()
                 playback_idle.clear()
             try:
-                return audio_executor.submit(play_feedback, clip, spoken, cue, wake)
+                return audio_executor.submit(play_feedback, clip, spoken, cue, wake, voice)
             except RuntimeError:
-                finish_playback(cue, wake)
+                finish_playback(wake)
                 return None
 
-    def finish_playback(cue, wake):
+    def finish_playback(wake):
         nonlocal pending_playback
         # Caller holds audio_lock.
-        if not cue:
-            if wake:
-                # Drop only pre-playback backlog, while capture is still
-                # paused. New command frames may arrive during decoder reset.
-                discard_queued_audio()
-                wake_resume.set()
+        if wake:
+            wake_output.clear()
+        else:
             pending_playback -= 1
             if pending_playback == 0:
-                if not wake_resume.is_set():
-                    disrupted.set()
+                disrupted.set()
                 playing.clear()
                 playback_idle.set()
         audio_slots.release()
 
-    def play_feedback(clip, spoken, cue, wake):
+    def play_feedback(clip, spoken, cue, wake, voice):
         try:
             if cue and not stop_event.is_set():
                 try:
@@ -176,29 +177,30 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
                     print(f"Could not play feedback clip: {error}", file=sys.stderr)
             if spoken and not stop_event.is_set():
                 try:
-                    speak_text(spoken)
+                    speak_text(spoken, voice)
                 except Exception as error:
                     print(f"Could not speak feedback: {error}", file=sys.stderr)
         finally:
-            if not cue and not wake:
+            if not wake:
                 # Allow speaker echo to fade before accepting new microphone input.
                 stop_event.wait(0.25)
             with audio_lock:
-                finish_playback(cue, wake)
+                finish_playback(wake)
 
     def play_wake_feedback(trigger):
         settings = trigger["audio_feedback"]
         clip, spoken = select_wake_audio(settings)
         if clip or spoken:
-            schedule_audio(clip=clip, spoken=spoken, wake=True)
+            schedule_audio(clip=clip, spoken=spoken, wake=True, voice=settings.get("voice", "default"))
         elif not settings.get("clips") and not settings.get("spoken_text", "").strip():
-            schedule_audio(cue=True)
+            schedule_audio(cue=True, wake=True)
 
     bus.subscribe(publish)
 
     def on_action(rule, event, popup):
         trigger = next((t for t in config["triggers"] if t["id"] == event["trigger_id"]), {})
-        speak_progress = trigger.get("audio_feedback", {}).get("speak_response", False)
+        settings = trigger.get("audio_feedback", {})
+        speak_progress = settings.get("speak_response", False)
         last_queued = None
         spoken_updates = 0
 
@@ -207,7 +209,7 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
             if popup:
                 feedback(dict(popup, phase="running", action_result=True, response=text))
             if speak_progress and spoken_updates < 6:
-                playback = schedule_audio(spoken=text)
+                playback = schedule_audio(spoken=text, voice=settings.get("voice", "default"))
                 if playback is not None:
                     last_queued = text
                     spoken_updates += 1
@@ -254,7 +256,7 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
         cue = play_wake_feedback if not args.wav and any(
             t.get("audio_feedback", {}).get("wake_cue") for t in current["triggers"]
         ) else None
-        return RecognitionEngine(model, sample_rate, detector, debug, cue)
+        return RecognitionEngine(model, sample_rate, detector, debug, cue, wake_output.is_set)
 
     if args.wav:
         with wave.open(str(args.wav), "rb") as recording:
@@ -317,17 +319,13 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
                 if disrupted.is_set():
                     disrupted.clear()
                     discard_queued_audio()
-                    if not wake_resume.is_set():
-                        engine.cancel()
-                        print("Audio reset: discarded backlog and unfinished input.", file=sys.stderr)
-                if wake_resume.is_set():
-                    wake_resume.clear()
-                    engine.resume_after_wake_feedback()
+                    engine.cancel()
+                    print("Audio reset: discarded backlog and unfinished input.", file=sys.stderr)
                 try:
                     data = audio.get(timeout=0.1)
                 except queue.Empty:
                     continue
-                if not playing.is_set() and not disrupted.is_set() and not wake_resume.is_set():
+                if not playing.is_set() and not disrupted.is_set():
                     engine.feed(data)
         finally:
             stop_event.set()

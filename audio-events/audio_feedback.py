@@ -8,6 +8,7 @@ import subprocess
 import wave
 
 MAX_SPEECH_CHARS = 500
+VOICE_OPTIONS = ("default", "female")
 
 
 def validate_audio_feedback(settings):
@@ -29,6 +30,8 @@ def validate_audio_feedback(settings):
     text = settings.get("spoken_text", "")
     if not isinstance(text, str) or len(text) > MAX_SPEECH_CHARS:
         raise ValueError(f"Speak this text must be at most {MAX_SPEECH_CHARS} characters")
+    if settings.get("voice", "default") not in VOICE_OPTIONS:
+        raise ValueError("Voice must be Windows default or female")
 
 
 def select_wake_audio(settings, rng=random):
@@ -59,15 +62,21 @@ def play_wake_cue():
     winsound.Beep(880, 100)
 
 
-def speak_text(text):
+def speak_text(text, voice="default"):
     powershell = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32/WindowsPowerShell/v1.0/powershell.exe"
     # Pass speech through stdin, separate from the fixed PowerShell code.
+    select_voice = ""
+    if voice == "female":
+        select_voice = (
+            "$female = $voice.GetInstalledVoices() | Where-Object { $_.Enabled -and $_.VoiceInfo.Gender -eq 'Female' } | Select-Object -First 1; "
+            "if ($female) { $voice.SelectVoice($female.VoiceInfo.Name) }; "
+        )
     script = (
         "$ErrorActionPreference = 'Stop'; "
         "Add-Type -AssemblyName System.Speech; "
         "[Console]::InputEncoding = [Text.Encoding]::UTF8; "
         "$voice = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
-        "try { $voice.Speak([Console]::In.ReadToEnd()) } finally { $voice.Dispose() }"
+        "try { " + select_voice + "$voice.Speak([Console]::In.ReadToEnd()) } finally { $voice.Dispose() }"
     )
     subprocess.run([str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
                    input=text.encode("utf-8"), stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,

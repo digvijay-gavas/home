@@ -40,7 +40,8 @@
       },
       "audio_feedback": {
         "wake_cue": true,
-        "speak_response": true
+        "speak_response": true,
+        "voice": "female"
       }
     },
     {

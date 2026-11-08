@@ -46,12 +46,13 @@ class VocabularyStream:
 
 
 class RecognitionEngine:
-    def __init__(self, model, rate, detector, debug=lambda result: None, on_wake_cue=None):
+    def __init__(self, model, rate, detector, debug=lambda result: None, on_wake_cue=None, wake_output_active=None):
         self.model = model
         self.rate = rate
         self.detector = detector
         self.debug = debug
         self.on_wake_cue = on_wake_cue
+        self.wake_output_active = wake_output_active
         self.audio_time = 0.0
         self.needs_pre_roll = any(t.get("vocabulary", {}).get("enabled") for t in detector.triggers)
         self._reset_recognizers()
@@ -82,18 +83,6 @@ class RecognitionEngine:
         elif elapsed >= 0.35 and self.quiet_for >= 0.25:
             active["wake_cue_sent"] = True
             self.on_wake_cue(active["trigger"])
-
-    def resume_after_wake_feedback(self):
-        active = self.detector.active
-        if not active:
-            return
-        active["wake_end"] = self.audio_time
-        active["last_word_end"] = None
-        self._reset_recognizers()
-        # The session has already matched, so start its vocabulary decoder
-        # directly instead of waiting for a second wake phrase.
-        if active["trigger"].get("vocabulary", {}).get("enabled"):
-            self.vocabulary = VocabularyStream(self.model, self.rate, trigger_vocabulary(active["trigger"]), self.audio_time)
 
     def _ensure_vocabulary(self, wake_words):
         if self.vocabulary is not None:
@@ -135,7 +124,9 @@ class RecognitionEngine:
             self.vocabulary.feed(data)
         full_final = self.full.AcceptWaveform(data)
         active = self.detector.active
-        force_final = active and self.audio_time - active["wake_end"] >= active["trigger"].get("max_argument_seconds", 15.0)
+        if active and active["last_word_end"] is None and self.wake_output_active and self.wake_output_active():
+            active["input_wait_start"] = self.audio_time
+        force_final = active and self.audio_time - active.get("input_wait_start", active["wake_end"]) >= active["trigger"].get("max_argument_seconds", 15.0)
         if force_final and not full_final:
             full_result, full_words = self._parse(self.full.FinalResult())
             full_final = True

@@ -159,14 +159,15 @@ For example, 25% gives each paused wake a one-in-four chance of playing one clip
 chosen uniformly from the list. A setting of 0% skips clips, and 100% plays
 one whenever playback is available.
 
-Enter a fixed phrase under **Speak this text before taking the command**. Start
-speaking as soon as the clip and phrase finish. Bobo queues the first command
-audio immediately and gives you the full input timeout. Enable **Speak the
-action’s text response** to hear the action's separate replies. Both use the
-installed Windows voice and work independently of clip chance. Choose **Apply
-to trigger** and **Save trigger**. Audio feedback works independently of the
-visual popup and uses the Windows default output. Bobo pauses recognition
-during clip and speech playback to reduce speaker feedback. `--wav` is silent.
+Enter a fixed phrase under **Wake reply text**. Bobo keeps capturing the command
+while the wake clip or phrase plays. If you wait, you still have the input
+timeout after playback. Speaker bleed can affect recognition while you and the
+reply overlap. Enable **Speak the action’s text response** to hear action
+replies. Choose **Female** under **Spoken voice** to prefer an installed female
+Windows voice for both kinds of speech. Bobo uses the Windows default voice
+when a female voice is unavailable. Choose **Apply to trigger** and **Save trigger**.
+Bobo pauses recognition during action replies to reduce speaker feedback.
+`--wav` is silent.
 
 The popup appears on wake detection and shows **Listening…**, then the recognized
 input. After the event completes, it stays for the cooldown period, then closes.

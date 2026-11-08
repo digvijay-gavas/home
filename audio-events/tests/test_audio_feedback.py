@@ -22,7 +22,7 @@ class AudioFeedbackTests(unittest.TestCase):
     def test_invalid_clip_and_probability_are_rejected(self):
         for settings in ({"clips": ["clip.mp3"]}, {"clip_chance_percent": -1}, {"clip_chance_percent": 101},
                          {"clip_chance_percent": float("nan")}, {"speak_response": "yes"},
-                         {"spoken_text": "a" * 501}, {"spoken_text": None}):
+                         {"spoken_text": "a" * 501}, {"spoken_text": None}, {"voice": "unknown"}):
             with self.subTest(settings=settings), self.assertRaises(ValueError):
                 validate_audio_feedback(settings)
 
@@ -44,3 +44,10 @@ class AudioFeedbackTests(unittest.TestCase):
         self.assertNotIn(text, " ".join(args[0]))
         self.assertEqual(kwargs["input"], text.encode("utf-8"))
         self.assertEqual(kwargs["stdout"], subprocess.DEVNULL)
+
+    @patch("audio_feedback.subprocess.run")
+    def test_female_voice_is_selected_from_installed_voices(self, run):
+        speak_text("Yes?", voice="female")
+        command = run.call_args.args[0][-1]
+        self.assertIn("Gender -eq 'Female'", command)
+        self.assertIn("SelectVoice($female.VoiceInfo.Name)", command)

@@ -294,7 +294,7 @@ class AudioEventsApp:
         body = ttk.Frame(dialog, padding=18)
         body.pack(fill="both", expand=True)
         ttk.Label(body, text="Bobo can play one random WAV and speak a phrase when you pause after the wake word.\n"
-                  "Choose WAV clips up to 15 seconds and wait for playback before speaking.", justify="left").pack(anchor="w", pady=(0, 8))
+                  "Choose WAV clips up to 15 seconds. You can talk while wake feedback plays.", justify="left").pack(anchor="w", pady=(0, 8))
         clips = tk.Listbox(body, width=68, height=6, selectmode="extended")
         clips.pack(fill="both", expand=True)
         for path in self.audio_feedback.get("clips", []):
@@ -322,16 +322,23 @@ class AudioEventsApp:
         speak = tk.BooleanVar(dialog, value=self.audio_feedback.get("speak_response", False))
         wake_cue = tk.BooleanVar(dialog, value=self.audio_feedback.get("wake_cue", False))
         ttk.Checkbutton(body, text="Play wake feedback when I pause after the wake phrase", variable=wake_cue).pack(anchor="w")
-        ttk.Label(body, text="Speak this text before taking the command (optional)").pack(anchor="w", pady=(8, 3))
+        ttk.Label(body, text="Wake reply text (optional)").pack(anchor="w", pady=(8, 3))
         spoken_text = tk.Text(body, width=68, height=3, wrap="word", undo=True)
         spoken_text.pack(fill="x")
         spoken_text.insert("1.0", self.audio_feedback.get("spoken_text", ""))
         ttk.Checkbutton(body, text="Speak the action’s text response", variable=speak).pack(anchor="w", pady=8)
+        voice_row = ttk.Frame(body)
+        voice_row.pack(fill="x", pady=(0, 8))
+        voice_names = {"default": "Windows default", "female": "Female"}
+        voice = tk.StringVar(dialog, value=voice_names[self.audio_feedback.get("voice", "default")])
+        ttk.Label(voice_row, text="Spoken voice").pack(side="left", padx=(0, 8))
+        ttk.Combobox(voice_row, textvariable=voice, values=tuple(voice_names.values()), state="readonly").pack(side="left")
 
         def apply():
             try:
                 settings = {"clips": list(clips.get(0, "end")), "clip_chance_percent": float(chance.get()),
                             "speak_response": speak.get(), "wake_cue": wake_cue.get(),
+                            "voice": next(key for key, label in voice_names.items() if label == voice.get()),
                             "spoken_text": spoken_text.get("1.0", "end-1c").strip()}
                 validate_audio_feedback(settings)
             except ValueError as error:

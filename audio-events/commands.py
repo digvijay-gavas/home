@@ -64,12 +64,13 @@ class CommandDetector:
         if argument_words:
             session["last_word_end"] = argument_words[-1]["end"]
         trigger = session["trigger"]
-        if audio_time - session["wake_end"] >= trigger.get("max_argument_seconds", 15.0):
+        capture_elapsed = audio_time - session.get("input_wait_start", session["wake_end"])
+        if capture_elapsed >= trigger.get("max_argument_seconds", 15.0):
             return self.finish(audio_time, "max_duration")
         if session["last_word_end"] is not None:
             if not speech_pending and audio_time - session["last_word_end"] >= trigger.get("silence_seconds", 1.2):
                 return self.finish(audio_time, "silence")
-        elif audio_time - session["wake_end"] >= trigger.get("argument_timeout_seconds", 5.0):
+        elif capture_elapsed >= trigger.get("argument_timeout_seconds", 5.0):
             # Do not abandon speech already being decoded merely because the
             # first stable word has not arrived yet.
             if not speech_pending:
