@@ -91,6 +91,22 @@ launched headless listeners are not covered by this status indicator.
 | End after silence | Silence after the input that completes the command (default 1.2 s) |
 | Maximum capture | Maximum capture duration after the wake phrase (default 15 s) |
 
+Choose **Edit speech vocabulary…** to configure recognition for a trigger.
+Enable speech capture, then add terms, example sentences, or spoken aliases
+such as `team center = Teamcenter`. With that alias, an
+example sentence like `open Teamcenter` uses `open team center` for recognition
+and writes `open Teamcenter` in the event's `input` and feedback. The event log
+also keeps `raw_input` with the decoder's original words. Apply the vocabulary
+and choose **Save trigger**. Reopen settings and restart the listener once
+after installing this version to load the new code.
+
+Aliases also work in open dictation when the decoded words match the spoken
+side of the alias. To change what Vosk listens for, enable **Focus recognition
+on these words and sentences**. This narrows the decoder to the listed terms
+and sentence words, so include the surrounding words you expect to say. The
+installed model must know the spoken words used in focused mode. Use Event log
+to compare `raw_input` with the final `input` and check `recognition_mode`.
+
 The popup appears on wake detection and shows **Listening…**, then the recognized
 input. After the event completes, it stays for the cooldown period, then closes.
 It stays out of the taskbar and is configured not to take keyboard focus on

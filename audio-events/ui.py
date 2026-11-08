@@ -19,6 +19,7 @@ from configuration import read_config, save_config, validate_config
 from feedback import FeedbackPopup
 from event_log import EventLog, log_path
 from runtime import AlreadyRunning, LocalSignal, claim_listener, listener_running, send_signal
+from vocabulary import validate_vocabulary_settings
 
 ROOT = Path(__file__).resolve().parent
 DEFAULTS = {"id": "", "phrase": "", "event": "voice_command.received", "min_confidence": 0.8,
@@ -35,6 +36,7 @@ class AudioEventsApp:
         self.config = read_config(self.config_path)
         self.selected_id = None
         self.dirty = False
+        self.vocabulary = {}
         self.saving = False
         self.closed = False
         self.mailbox = queue.Queue()
@@ -127,7 +129,9 @@ class AudioEventsApp:
         save.grid(row=10, column=0, columnspan=2, sticky="ew", pady=(12, 7))
         preview = ttk.Button(right, text="Preview feedback", command=self.preview)
         preview.grid(row=11, column=0, columnspan=2, sticky="ew")
-        self.buttons.extend((save, preview))
+        self.vocabulary_button = ttk.Button(right, text="Edit speech vocabulary…", command=self.edit_vocabulary)
+        self.vocabulary_button.grid(row=12, column=0, columnspan=2, sticky="ew", pady=(7, 0))
+        self.buttons.extend((save, preview, self.vocabulary_button))
         ttk.Label(body, textvariable=self.notice, wraplength=990).grid(row=1, column=0, columnspan=2, sticky="w", pady=(16, 0))
         self._build_history()
 
@@ -221,6 +225,8 @@ class AudioEventsApp:
     def _load(self, trigger_id):
         trigger = next(t for t in self.config["triggers"] if t["id"] == trigger_id)
         self.selected_id = trigger_id
+        self.vocabulary = copy.deepcopy(trigger.get("vocabulary", {}))
+        self._show_vocabulary_mode()
         for key, variable in self.fields.items():
             # Existing phrase-only triggers stay phrase-only until explicitly enabled.
             value = trigger.get(key, False if key in BOOL_FIELDS else DEFAULTS[key])
@@ -245,6 +251,8 @@ class AudioEventsApp:
         if self.saving or not self._discard_edits():
             return
         self.selected_id = None
+        self.vocabulary = {}
+        self._show_vocabulary_mode()
         self.triggers.selection_remove(*self.triggers.selection())
         for key, value in DEFAULTS.items():
             self.fields[key].set(value if key in BOOL_FIELDS else str(value))
@@ -257,7 +265,71 @@ class AudioEventsApp:
             trigger[key] = variable.get() if key in BOOL_FIELDS else variable.get().strip()
         for key in NUMBER_FIELDS:
             trigger[key] = float(trigger[key])
+        if self.vocabulary:
+            trigger["vocabulary"] = copy.deepcopy(self.vocabulary)
         return trigger
+
+    def _show_vocabulary_mode(self):
+        if self.vocabulary.get("enabled"):
+            mode = "Focused vocabulary"
+        elif self.vocabulary.get("aliases"):
+            mode = "Open dictation + aliases"
+        else:
+            mode = "Open dictation"
+        self.vocabulary_button.configure(text=f"Edit speech vocabulary… ({mode})")
+
+    def edit_vocabulary(self):
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Speech vocabulary")
+        dialog.transient(self.root)
+        body = ttk.Frame(dialog, padding=18)
+        body.pack(fill="both", expand=True)
+        enabled = tk.BooleanVar(dialog, value=self.vocabulary.get("enabled", False))
+        ttk.Checkbutton(body, text="Focus recognition on these words and sentences", variable=enabled).pack(anchor="w")
+        ttk.Label(body, text="Spelling aliases also work in open dictation. Enter the words Vosk hears,\n"
+                  "then the spelling you want. For focused mode, add full examples\n"
+                  "that include the surrounding words you plan to say.",
+                  justify="left").pack(anchor="w", pady=8)
+        fields = {}
+        for key, title in (("words", "Words or short terms (one per line)"),
+                           ("sentences", "Example sentences (one per line)"),
+                           ("aliases", "Spoken = written (for example, team center = Teamcenter)")):
+            ttk.Label(body, text=title).pack(anchor="w", pady=(6, 3))
+            entry = tk.Text(body, height=4, width=62, wrap="word", undo=True)
+            entry.pack(fill="both", expand=True)
+            values = self.vocabulary.get(key, {} if key == "aliases" else [])
+            entry.insert("1.0", "\n".join(f"{spoken} = {written}" for spoken, written in values.items())
+                         if key == "aliases" else "\n".join(values))
+            fields[key] = entry
+
+        def apply():
+            values = {key: [line.strip() for line in entry.get("1.0", "end-1c").splitlines() if line.strip()]
+                      for key, entry in fields.items()}
+            aliases = {}
+            try:
+                for line in values["aliases"]:
+                    spoken, separator, written = line.partition("=")
+                    if not separator or spoken.strip() in aliases:
+                        raise ValueError("Enter each alias as a unique spoken phrase = written spelling")
+                    aliases[spoken.strip()] = written.strip()
+                values.update(aliases=aliases, enabled=enabled.get())
+                validate_vocabulary_settings(values)
+            except ValueError as error:
+                messagebox.showerror("Check vocabulary", str(error), parent=dialog)
+                return
+            self.vocabulary = values
+            self._show_vocabulary_mode()
+            self.dirty = True
+            self.notice.set("Vocabulary edited. Choose Save trigger to apply it.")
+            dialog.destroy()
+
+        actions = ttk.Frame(body)
+        actions.pack(fill="x", pady=(12, 0))
+        ttk.Button(actions, text="Apply to trigger", command=apply).pack(side="right")
+        ttk.Button(actions, text="Cancel", command=dialog.destroy).pack(side="right", padx=8)
+        dialog.wait_visibility()
+        dialog.grab_set()
+        fields["words"].focus_set()
 
     def save(self):
         if self.saving:

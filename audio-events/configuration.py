@@ -7,6 +7,7 @@ import os
 import tempfile
 
 from events import EventBus, PhraseDetector
+from vocabulary import validate_vocabulary_settings
 
 
 def validate_config(config):
@@ -26,6 +27,10 @@ def validate_config(config):
     for trigger in triggers:
         if not isinstance(trigger, dict):
             raise ValueError("Each trigger must be an object")
+        if "vocabulary" in trigger:
+            validate_vocabulary_settings(trigger["vocabulary"])
+            if trigger["vocabulary"].get("enabled") and not trigger.get("capture_arguments", False):
+                raise ValueError("Enable speech capture to use an event vocabulary")
         for field in ("id", "phrase", "event"):
             if not isinstance(trigger.get(field), str) or not trigger[field].strip():
                 raise ValueError(f"Each trigger needs a nonempty {field}")

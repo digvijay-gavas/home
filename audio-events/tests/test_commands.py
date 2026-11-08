@@ -46,6 +46,12 @@ class CommandTests(unittest.TestCase):
         self.assertEqual(self.events, [])
         self.assertEqual(self.feedback, [])
 
+    def test_unrecognized_audio_does_not_join_parts_of_an_alias(self):
+        self.trigger["vocabulary"] = {"enabled": True, "aliases": {"team center": "Teamcenter"}}
+        transcript = [word("team", 1, 1.2), word("[unk]", 1.2, 1.4), word("center", 1.4, 1.6)]
+        self.detector.observe(WAKE, transcript, 3)
+        self.assertEqual(self.events[0]["input"], "team center")
+
     def test_no_input_timeout_finishes_with_empty_input(self):
         self.detector.observe(WAKE, WAKE["result"], 1)
         self.detector.observe({}, [], 5.8)

@@ -14,6 +14,7 @@ from configuration import read_config
 from events import EventBus, words
 from event_log import EventLog, log_path
 from recognition import RecognitionEngine
+from vocabulary import grammar_phrases
 
 ROOT = Path(__file__).resolve().parent
 
@@ -23,6 +24,13 @@ def validate_vocabulary(model, config):
         for word in words(trigger["phrase"]):
             if model.vosk_model_find_word(word) < 0:
                 raise ValueError(f"Model does not know {word!r}; choose another model or phrase")
+        vocabulary = trigger.get("vocabulary", {})
+        if vocabulary.get("enabled"):
+            for phrase in grammar_phrases(vocabulary):
+                for word in words(phrase):
+                    if model.vosk_model_find_word(word) < 0:
+                        raise ValueError(f"Vocabulary for {trigger['id']!r}: model does not know {word!r}. "
+                                         "Add a spoken alias made from known words, or choose another model.")
 
 
 def parse_args():

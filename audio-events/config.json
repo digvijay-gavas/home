@@ -13,7 +13,18 @@
       "show_feedback": true,
       "argument_timeout_seconds": 5.0,
       "silence_seconds": 1.2,
-      "max_argument_seconds": 15.0
+      "max_argument_seconds": 15.0,
+      "vocabulary": {
+        "words": [],
+        "sentences": [
+          "open Teamcenter"
+        ],
+        "aliases": {
+          "team center": "Teamcenter",
+          "rich client": "richclient"
+        },
+        "enabled": true
+      }
     },
     {
       "id": "hey_lili",
