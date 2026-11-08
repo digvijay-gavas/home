@@ -107,6 +107,31 @@ and sentence words, so include the surrounding words you expect to say. The
 installed model must know the spoken words used in focused mode. Use Event log
 to compare `raw_input` with the final `input` and check `recognition_mode`.
 
+### Command actions
+
+Open **Edit command actions…** for a trigger with speech capture enabled.
+Choose **New group**, pick a script or a registered callback, and enter the
+sentences that should run it, one per line. Choose **Apply to trigger**, then
+**Save trigger**. Add or save a group before switching to a different group.
+
+Hey Bobo comes with `current_time`. Say **“Hey Bobo, what is the time now?”**
+to get the computer's local time in the feedback popup and Event log. To add
+another Python callback, register a function that accepts the event dictionary
+and returns response text in `CALLBACKS` in `actions.py`.
+
+Scripts can be `.bat`, `.cmd`, or `.sh`. Relative paths start beside the config
+file. Scripts run from their own folder, with a 30-second timeout and no speech
+arguments. Windows `.sh` support uses Bash from Git for Windows. Use trusted
+scripts because a matching voice command runs them with your account's access.
+
+Actions require an exact match of the complete captured command after aliases,
+with recognized words meeting the trigger's confidence threshold. Focused mode
+includes action sentences in its vocabulary. Only completed microphone events
+dispatch actions. Matched events include `action` status and `response` after
+the action completes. Feedback displays the response when enabled for the
+trigger. The listener runs one action at a time and reports busy if another
+match arrives while it is running.
+
 The popup appears on wake detection and shows **Listening…**, then the recognized
 input. After the event completes, it stays for the cooldown period, then closes.
 It stays out of the taskbar and is configured not to take keyboard focus on

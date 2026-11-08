@@ -26,13 +26,29 @@ class AudioTests(unittest.TestCase):
         emitted, feedback = [], []
         bus = EventBus()
         bus.subscribe(emitted.append)
-        detector = CommandDetector(triggers or self.config["triggers"], bus, feedback.append, "wav")
+        if triggers is None:
+            triggers = [{key: value for key, value in trigger.items() if key not in ("vocabulary", "actions")}
+                        for trigger in self.config["triggers"]]
+        detector = CommandDetector(triggers, bus, feedback.append, "wav")
         with wave.open(str(ROOT / "test-audio" / (name + ".wav")), "rb") as audio:
             engine = RecognitionEngine(self.model, audio.getframerate(), detector)
             while data := audio.readframes(1600):
                 engine.feed(data)
             engine.end()
         return emitted, feedback
+
+    def test_configured_time_command_is_recognized_but_wav_cannot_dispatch(self):
+        emitted = []
+        bus = EventBus()
+        bus.subscribe(emitted.append)
+        detector = CommandDetector(self.config["triggers"], bus, source="wav",
+                                   on_action=lambda *_: self.fail("WAV dispatched an action"))
+        with wave.open(str(ROOT / "test-audio" / "continuous.wav"), "rb") as audio:
+            engine = RecognitionEngine(self.model, audio.getframerate(), detector)
+            while data := audio.readframes(1600):
+                engine.feed(data)
+            engine.end()
+        self.assertEqual([e["input"] for e in emitted], ["what is the time now"])
 
     def test_continuous_and_paused_speech(self):
         for name in ("continuous", "paused"):

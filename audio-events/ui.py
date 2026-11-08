@@ -12,10 +12,11 @@ import tempfile
 import threading
 import time
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 import uuid
 
 from configuration import read_config, save_config, validate_config
+from actions import CALLBACKS, validate_actions
 from feedback import FeedbackPopup
 from event_log import EventLog, log_path
 from runtime import AlreadyRunning, LocalSignal, claim_listener, listener_running, send_signal
@@ -37,6 +38,7 @@ class AudioEventsApp:
         self.selected_id = None
         self.dirty = False
         self.vocabulary = {}
+        self.actions = []
         self.saving = False
         self.closed = False
         self.mailbox = queue.Queue()
@@ -132,6 +134,9 @@ class AudioEventsApp:
         self.vocabulary_button = ttk.Button(right, text="Edit speech vocabulary…", command=self.edit_vocabulary)
         self.vocabulary_button.grid(row=12, column=0, columnspan=2, sticky="ew", pady=(7, 0))
         self.buttons.extend((save, preview, self.vocabulary_button))
+        actions_button = ttk.Button(left, text="Edit command actions…", command=self.edit_actions)
+        actions_button.pack(anchor="w", pady=(10, 0))
+        self.buttons.append(actions_button)
         ttk.Label(body, textvariable=self.notice, wraplength=990).grid(row=1, column=0, columnspan=2, sticky="w", pady=(16, 0))
         self._build_history()
 
@@ -226,6 +231,7 @@ class AudioEventsApp:
         trigger = next(t for t in self.config["triggers"] if t["id"] == trigger_id)
         self.selected_id = trigger_id
         self.vocabulary = copy.deepcopy(trigger.get("vocabulary", {}))
+        self.actions = copy.deepcopy(trigger.get("actions", []))
         self._show_vocabulary_mode()
         for key, variable in self.fields.items():
             # Existing phrase-only triggers stay phrase-only until explicitly enabled.
@@ -252,6 +258,7 @@ class AudioEventsApp:
             return
         self.selected_id = None
         self.vocabulary = {}
+        self.actions = []
         self._show_vocabulary_mode()
         self.triggers.selection_remove(*self.triggers.selection())
         for key, value in DEFAULTS.items():
@@ -267,7 +274,115 @@ class AudioEventsApp:
             trigger[key] = float(trigger[key])
         if self.vocabulary:
             trigger["vocabulary"] = copy.deepcopy(self.vocabulary)
+        if self.actions or "actions" in trigger:
+            trigger["actions"] = copy.deepcopy(self.actions)
         return trigger
+
+    def edit_actions(self):
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Command actions")
+        dialog.transient(self.root)
+        body = ttk.Frame(dialog, padding=18)
+        body.pack(fill="both", expand=True)
+        ttk.Label(body, text="Each group runs one action when any of its sentences matches.\n"
+                  "Use the full command after the wake phrase, one sentence per line.").pack(anchor="w", pady=(0, 8))
+        rules = copy.deepcopy(self.actions)
+        groups = tk.Listbox(body, width=64, height=5, exportselection=False)
+        groups.pack(fill="both", expand=True)
+        kind = tk.StringVar(dialog, value="callback")
+        target = tk.StringVar(dialog, value="current_time")
+        target_row = ttk.Frame(body)
+        target_row.pack(fill="x", pady=8)
+        kinds = ttk.Combobox(target_row, textvariable=kind, values=("callback", "script"), state="readonly", width=12)
+        kinds.pack(side="left", padx=(0, 8))
+        targets = ttk.Combobox(target_row, textvariable=target)
+        targets.pack(side="left", fill="x", expand=True)
+
+        def browse():
+            path = filedialog.askopenfilename(parent=dialog, filetypes=[("Command scripts", "*.bat *.cmd *.sh")])
+            if path:
+                target.set(path)
+
+        browse_button = ttk.Button(target_row, text="Browse…", command=browse)
+        browse_button.pack(side="left", padx=(8, 0))
+        sentences = tk.Text(body, width=64, height=6, wrap="word", undo=True)
+        sentences.pack(fill="both", expand=True)
+        selected = None
+
+        def update_kind():
+            callback = kind.get() == "callback"
+            targets.configure(state="readonly" if callback else "normal", values=tuple(CALLBACKS) if callback else ())
+            browse_button.configure(state="disabled" if callback else "normal")
+
+        def change_kind(_):
+            target.set("current_time" if kind.get() == "callback" else "")
+            update_kind()
+
+        kinds.bind("<<ComboboxSelected>>", change_kind)
+
+        def refresh_groups():
+            groups.delete(0, "end")
+            for rule in rules:
+                groups.insert("end", f"{rule['kind']} · {rule['target']} · {len(rule['sentences'])} sentence(s)")
+
+        def load(index):
+            nonlocal selected
+            selected = index
+            groups.selection_clear(0, "end")
+            rule = rules[index] if index is not None else {"kind": "callback", "target": "current_time", "sentences": []}
+            if index is not None:
+                groups.selection_set(index)
+            kind.set(rule["kind"])
+            target.set(rule["target"])
+            sentences.delete("1.0", "end")
+            sentences.insert("1.0", "\n".join(rule["sentences"]))
+            update_kind()
+
+        def form():
+            return {"kind": kind.get(), "target": target.get().strip(),
+                    "sentences": [line.strip() for line in sentences.get("1.0", "end-1c").splitlines() if line.strip()]}
+
+        def update_group():
+            candidate = list(rules)
+            index = selected if selected is not None else len(rules)
+            candidate[index:index + 1] = [form()]
+            try:
+                validate_actions(candidate)
+            except ValueError as error:
+                messagebox.showerror("Check command action", str(error), parent=dialog)
+                return False
+            rules[:] = candidate
+            refresh_groups()
+            load(index)
+            return True
+
+        def delete_group():
+            if selected is not None:
+                del rules[selected]
+                refresh_groups()
+                load(None)
+
+        def apply():
+            draft = form()
+            if ((selected is not None and draft != rules[selected]) or
+                    (selected is None and draft["sentences"])) and not update_group():
+                return
+            self.actions = rules
+            self.dirty = True
+            self.notice.set("Actions edited. Choose Save trigger to apply them.")
+            dialog.destroy()
+
+        groups.bind("<<ListboxSelect>>", lambda _: load(groups.curselection()[0]) if groups.curselection() else None)
+        row = ttk.Frame(body)
+        row.pack(fill="x", pady=8)
+        for label, command in (("New group", lambda: load(None)), ("Save group", update_group), ("Remove group", delete_group)):
+            ttk.Button(row, text=label, command=command).pack(side="left", padx=(0, 6))
+        ttk.Button(body, text="Apply to trigger", command=apply).pack(side="right")
+        ttk.Button(body, text="Cancel", command=dialog.destroy).pack(side="right", padx=8)
+        refresh_groups()
+        load(0 if rules else None)
+        dialog.wait_visibility()
+        dialog.grab_set()
 
     def _show_vocabulary_mode(self):
         if self.vocabulary.get("enabled"):

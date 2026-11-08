@@ -4,7 +4,7 @@ import json
 from collections import deque
 
 from events import words
-from vocabulary import grammar_phrases
+from vocabulary import grammar_phrases, trigger_vocabulary
 
 
 class VocabularyStream:
@@ -76,7 +76,7 @@ class RecognitionEngine:
         trigger, matched, _ = match
         wake_end = matched[-1]["end"]
         offset = max(wake_end, self.pre_roll[0][0]) if self.pre_roll else wake_end
-        self.vocabulary = VocabularyStream(self.model, self.rate, trigger["vocabulary"], offset)
+        self.vocabulary = VocabularyStream(self.model, self.rate, trigger_vocabulary(trigger), offset)
         # Replay only audio after the wake word, including words spoken before
         # the wake decoder reported its match. No disk recording is involved.
         for start, data in self.pre_roll:

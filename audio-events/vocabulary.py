@@ -7,6 +7,12 @@ def normalize(text):
     return " ".join(words(text))
 
 
+def trigger_vocabulary(trigger):
+    value = trigger.get("vocabulary", {})
+    sentences = [sentence for rule in trigger.get("actions", []) for sentence in rule["sentences"]]
+    return dict(value, sentences=value.get("sentences", []) + sentences)
+
+
 def validate_vocabulary_settings(value):
     if not isinstance(value, dict):
         raise ValueError("Vocabulary must be an object")

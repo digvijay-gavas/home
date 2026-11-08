@@ -14,6 +14,8 @@ class FeedbackPopup:
 
     def update(self, update):
         session_id = update["session_id"]
+        if update.get("action_result") and self.session_id != session_id:
+            return
         if self.dismissed == session_id:
             return
         if session_id != self.session_id:
@@ -25,16 +27,19 @@ class FeedbackPopup:
         if self.window is None:
             self._create()
         phase = update["phase"]
-        self.heading.set("Listening…" if phase == "listening" else "Event received" if phase == "complete" else "Cancelled")
+        self.heading.set({"listening": "Listening…", "running": "Running action…",
+                          "complete": "Event received", "cancelled": "Cancelled"}[phase])
         self.phrase.set(update["phrase"])
         self.input.set(update["input"] or ("What would you like to say?" if phase == "listening" else "No input heard"))
         self.text.configure(state="normal")
         self.text.delete("1.0", "end")
         self.text.insert("1.0", self.input.get())
+        if update.get("response"):
+            self.text.insert("end", "\n\n" + update["response"])
         self.text.see("end")
         self.text.configure(state="disabled")
         self.details.set(update["event"] if phase == "complete" else "Offline · audio stays on this computer")
-        if phase != "listening":
+        if phase in ("complete", "cancelled"):
             self.dismiss_timer = self.root.after(int(update["cooldown_seconds"] * 1000), self.hide)
 
     def _create(self):

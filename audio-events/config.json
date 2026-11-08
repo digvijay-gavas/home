@@ -14,6 +14,13 @@
       "argument_timeout_seconds": 5.0,
       "silence_seconds": 1.2,
       "max_argument_seconds": 15.0,
+      "actions": [
+        {
+          "kind": "callback",
+          "target": "current_time",
+          "sentences": ["what is time", "what is the time", "what is the time now", "what time is it"]
+        }
+      ],
       "vocabulary": {
         "words": [],
         "sentences": [

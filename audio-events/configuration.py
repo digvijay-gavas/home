@@ -8,6 +8,7 @@ import tempfile
 
 from events import EventBus, PhraseDetector
 from vocabulary import validate_vocabulary_settings
+from actions import validate_actions
 
 
 def validate_config(config):
@@ -27,6 +28,9 @@ def validate_config(config):
     for trigger in triggers:
         if not isinstance(trigger, dict):
             raise ValueError("Each trigger must be an object")
+        validate_actions(trigger.get("actions", []))
+        if trigger.get("actions") and not trigger.get("capture_arguments", False):
+            raise ValueError("Enable speech capture to use command actions")
         if "vocabulary" in trigger:
             validate_vocabulary_settings(trigger["vocabulary"])
             if trigger["vocabulary"].get("enabled") and not trigger.get("capture_arguments", False):

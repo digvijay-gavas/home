@@ -1,6 +1,7 @@
 """Offline microphone -> wake phrase + arguments -> JSON events."""
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
 import queue
@@ -10,11 +11,12 @@ import time
 import wave
 
 from commands import CommandDetector
+from actions import run_action
 from configuration import read_config
 from events import EventBus, words
 from event_log import EventLog, log_path
 from recognition import RecognitionEngine
-from vocabulary import grammar_phrases
+from vocabulary import grammar_phrases, trigger_vocabulary
 
 ROOT = Path(__file__).resolve().parent
 
@@ -26,7 +28,7 @@ def validate_vocabulary(model, config):
                 raise ValueError(f"Model does not know {word!r}; choose another model or phrase")
         vocabulary = trigger.get("vocabulary", {})
         if vocabulary.get("enabled"):
-            for phrase in grammar_phrases(vocabulary):
+            for phrase in grammar_phrases(trigger_vocabulary(trigger)):
                 for word in words(phrase):
                     if model.vosk_model_find_word(word) < 0:
                         raise ValueError(f"Vocabulary for {trigger['id']!r}: model does not know {word!r}. "
@@ -80,6 +82,9 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
         return
     bus = EventBus()
     history = EventLog(log_path(args.config))
+    output_lock = threading.Lock()
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="bobo-action")
+    action_slot = threading.BoundedSemaphore()
 
     def emit(event):
         line = json.dumps(event)
@@ -94,11 +99,41 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
             with args.events.open("a", encoding="utf-8") as output:
                 output.write(line + "\n")
 
-    bus.subscribe(emit)
+    def publish(event):
+        with output_lock:
+            emit(event)
+
+    bus.subscribe(publish)
+
+    def on_action(rule, event, popup):
+        def complete(result):
+            event["action"] = {"kind": rule["kind"], "target": rule["target"], **result}
+            event["response"] = result["response"]
+            if popup:
+                feedback(dict(popup, action_result=True, response=result["response"]))
+            bus.publish(event)
+
+        if not action_slot.acquire(blocking=False):
+            complete({"status": "busy", "response": "Another action is running. Try again when it finishes."})
+            return
+
+        def execute():
+            try:
+                try:
+                    result = run_action(rule, event, args.config.resolve().parent)
+                except Exception as error:
+                    result = {"status": "error", "response": str(error)[:2000]}
+                complete(result)
+            finally:
+                action_slot.release()
+
+        if popup:
+            feedback(dict(popup, phase="running"))
+        executor.submit(execute)
     debug = (lambda result: print(json.dumps(result), file=sys.stderr)) if args.debug else (lambda result: None)
 
     def make_engine(current, sample_rate):
-        detector = CommandDetector(current["triggers"], bus, feedback, "wav" if args.wav else "microphone")
+        detector = CommandDetector(current["triggers"], bus, feedback, "wav" if args.wav else "microphone", on_action)
         return RecognitionEngine(model, sample_rate, detector, debug)
 
     if args.wav:
@@ -109,6 +144,7 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
             while data := recording.readframes(1600):
                 engine.feed(data)
             engine.end()
+        executor.shutdown()
         return
 
     engine = make_engine(config, rate)
@@ -170,6 +206,7 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
                 engine.feed(data)
         finally:
             engine.detector.cancel("listener_stopped")
+            executor.shutdown(wait=False)
 
 
 if __name__ == "__main__":

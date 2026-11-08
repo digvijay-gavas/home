@@ -6,14 +6,16 @@ import uuid
 
 from events import matching_phrases
 from vocabulary import apply_aliases
+from actions import match_action
 
 
 class CommandDetector:
-    def __init__(self, triggers, bus, feedback=lambda update: None, source="microphone"):
+    def __init__(self, triggers, bus, feedback=lambda update: None, source="microphone", on_action=None):
         self.triggers = triggers
         self.bus = bus
         self.feedback = feedback
         self.source = source
+        self.on_action = on_action
         self.active = None
         self.cooldowns = {}
 
@@ -44,6 +46,10 @@ class CommandDetector:
         argument_words = [word for word in after_wake if word["word"] != "[unk]"]
         text = " ".join(word["word"] for word in argument_words)
         vocabulary = session["trigger"].get("vocabulary", {})
+        session["action_input_valid"] = bool(argument_words) and all(
+            word["word"] != "[unk]" and word.get("conf", 0) >= session["trigger"]["min_confidence"]
+            for word in after_wake
+        )
         if vocabulary.get("enabled") or vocabulary.get("aliases"):
             session["raw_input"] = text
             text = apply_aliases(" ".join(word["word"] for word in after_wake), vocabulary)
@@ -65,13 +71,19 @@ class CommandDetector:
                 return self.finish(audio_time, "no_input")
         return False
 
-    def _feedback(self, phase, reason=None):
+    def _feedback_payload(self, phase, reason=None):
         session = self.active
         trigger = session["trigger"]
         if trigger.get("show_feedback", False):
-            self.feedback({"phase": phase, "session_id": session["id"], "phrase": trigger["phrase"],
-                           "input": session["input"], "event": trigger["event"],
-                           "cooldown_seconds": trigger["cooldown_seconds"], "reason": reason})
+            return {"phase": phase, "session_id": session["id"], "phrase": trigger["phrase"],
+                    "input": session["input"], "event": trigger["event"],
+                    "cooldown_seconds": trigger["cooldown_seconds"], "reason": reason}
+        return None
+
+    def _feedback(self, phase, reason=None):
+        payload = self._feedback_payload(phase, reason)
+        if payload:
+            self.feedback(payload)
 
     def finish(self, audio_time, reason):
         if self.active is None:
@@ -89,9 +101,17 @@ class CommandDetector:
             event["raw_input"] = session.get("raw_input", "")
             event["recognition_mode"] = "event_vocabulary" if vocabulary.get("enabled") else "open_dictation"
         self.cooldowns[trigger["id"]] = audio_time + trigger["cooldown_seconds"]
-        self._feedback("complete", reason)
+        rule = None
+        if self.on_action and self.source == "microphone" and reason == "silence" and session.get("action_input_valid"):
+            rule = match_action(trigger, event["input"])
+        payload = self._feedback_payload("complete", reason)
         self.active = None
-        self.bus.publish(event)
+        if rule:
+            self.on_action(rule, event, payload)
+        else:
+            if payload:
+                self.feedback(payload)
+            self.bus.publish(event)
         return True
 
     def cancel(self, reason="audio_gap"):
