@@ -17,6 +17,7 @@ import uuid
 
 from configuration import read_config, save_config, validate_config
 from actions import CALLBACKS, validate_actions
+from audio_feedback import validate_audio_feedback
 from feedback import FeedbackPopup
 from event_log import EventLog, log_path
 from runtime import AlreadyRunning, LocalSignal, claim_listener, listener_running, send_signal
@@ -39,6 +40,7 @@ class AudioEventsApp:
         self.dirty = False
         self.vocabulary = {}
         self.actions = []
+        self.audio_feedback = {}
         self.saving = False
         self.closed = False
         self.mailbox = queue.Queue()
@@ -134,9 +136,12 @@ class AudioEventsApp:
         self.vocabulary_button = ttk.Button(right, text="Edit speech vocabulary…", command=self.edit_vocabulary)
         self.vocabulary_button.grid(row=12, column=0, columnspan=2, sticky="ew", pady=(7, 0))
         self.buttons.extend((save, preview, self.vocabulary_button))
-        actions_button = ttk.Button(left, text="Edit command actions…", command=self.edit_actions)
-        actions_button.pack(anchor="w", pady=(10, 0))
-        self.buttons.append(actions_button)
+        editors = ttk.Frame(left)
+        editors.pack(fill="x", pady=(10, 0))
+        for label, command in (("Edit command actions…", self.edit_actions), ("Audio feedback…", self.edit_audio_feedback)):
+            button = ttk.Button(editors, text=label, command=command)
+            button.pack(side="left", padx=(0, 6))
+            self.buttons.append(button)
         ttk.Label(body, textvariable=self.notice, wraplength=990).grid(row=1, column=0, columnspan=2, sticky="w", pady=(16, 0))
         self._build_history()
 
@@ -232,6 +237,7 @@ class AudioEventsApp:
         self.selected_id = trigger_id
         self.vocabulary = copy.deepcopy(trigger.get("vocabulary", {}))
         self.actions = copy.deepcopy(trigger.get("actions", []))
+        self.audio_feedback = copy.deepcopy(trigger.get("audio_feedback", {}))
         self._show_vocabulary_mode()
         for key, variable in self.fields.items():
             # Existing phrase-only triggers stay phrase-only until explicitly enabled.
@@ -259,6 +265,7 @@ class AudioEventsApp:
         self.selected_id = None
         self.vocabulary = {}
         self.actions = []
+        self.audio_feedback = {}
         self._show_vocabulary_mode()
         self.triggers.selection_remove(*self.triggers.selection())
         for key, value in DEFAULTS.items():
@@ -276,7 +283,62 @@ class AudioEventsApp:
             trigger["vocabulary"] = copy.deepcopy(self.vocabulary)
         if self.actions or "actions" in trigger:
             trigger["actions"] = copy.deepcopy(self.actions)
+        if self.audio_feedback or "audio_feedback" in trigger:
+            trigger["audio_feedback"] = copy.deepcopy(self.audio_feedback)
         return trigger
+
+    def edit_audio_feedback(self):
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Audio feedback")
+        dialog.transient(self.root)
+        body = ttk.Frame(dialog, padding=18)
+        body.pack(fill="both", expand=True)
+        ttk.Label(body, text="Bobo picks one clip at random when a completed event passes the chance check.\n"
+                  "Choose short WAV clips up to 15 seconds.", justify="left").pack(anchor="w", pady=(0, 8))
+        clips = tk.Listbox(body, width=68, height=6, selectmode="extended")
+        clips.pack(fill="both", expand=True)
+        for path in self.audio_feedback.get("clips", []):
+            clips.insert("end", path)
+
+        def add_clips():
+            paths = filedialog.askopenfilenames(parent=dialog, filetypes=[("WAV audio", "*.wav")])
+            existing = set(clips.get(0, "end"))
+            for path in paths:
+                if path not in existing:
+                    clips.insert("end", path)
+                    existing.add(path)
+
+        def remove_clips():
+            for index in reversed(clips.curselection()):
+                clips.delete(index)
+
+        controls = ttk.Frame(body)
+        controls.pack(fill="x", pady=8)
+        ttk.Button(controls, text="Add WAV files…", command=add_clips).pack(side="left")
+        ttk.Button(controls, text="Remove selected", command=remove_clips).pack(side="left", padx=8)
+        chance = tk.StringVar(dialog, value=str(self.audio_feedback.get("clip_chance_percent", 100)))
+        ttk.Label(controls, text="Play chance (%)").pack(side="left", padx=(12, 5))
+        ttk.Entry(controls, textvariable=chance, width=7).pack(side="left")
+        speak = tk.BooleanVar(dialog, value=self.audio_feedback.get("speak_response", False))
+        ttk.Checkbutton(body, text="Speak the action’s text response", variable=speak).pack(anchor="w", pady=8)
+
+        def apply():
+            try:
+                settings = {"clips": list(clips.get(0, "end")), "clip_chance_percent": float(chance.get()),
+                            "speak_response": speak.get()}
+                validate_audio_feedback(settings)
+            except ValueError as error:
+                messagebox.showerror("Check audio feedback", str(error), parent=dialog)
+                return
+            self.audio_feedback = settings
+            self.dirty = True
+            self.notice.set("Audio feedback edited. Choose Save trigger to apply it.")
+            dialog.destroy()
+
+        ttk.Button(body, text="Apply to trigger", command=apply).pack(side="right")
+        ttk.Button(body, text="Cancel", command=dialog.destroy).pack(side="right", padx=8)
+        dialog.wait_visibility()
+        dialog.grab_set()
 
     def edit_actions(self):
         dialog = tk.Toplevel(self.root)

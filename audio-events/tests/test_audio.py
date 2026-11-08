@@ -63,7 +63,7 @@ class AudioTests(unittest.TestCase):
         self.assertEqual(self.recognize("unrelated")[0], [])
 
     def test_event_vocabulary_preserves_continuous_and_paused_arguments(self):
-        trigger = dict(self.config["triggers"][0], vocabulary={
+        trigger = dict(self.config["triggers"][0], actions=[], vocabulary={
             "enabled": True,
             "words": ["TimeNow"],
             "sentences": ["what is the TimeNow"],

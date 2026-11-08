@@ -6,7 +6,7 @@ feedback. These two speaking styles produce the same event and input:
 - “Hey Bobo, what is the time now?”
 - “Hey Bobo” → pause → “What is the time now?”
 
-It captures the words; it does **not** answer the question or execute commands.
+It captures the words and can run a configured action for a matching command.
 No cloud account, API key, camera, or internet connection is needed at runtime.
 No audio or events are uploaded. Audio buffers and recent recognition results
 stay in bounded memory and are discarded. Audio is never saved by the listener.
@@ -131,6 +131,21 @@ dispatch actions. Matched events include `action` status and `response` after
 the action completes. Feedback displays the response when enabled for the
 trigger. The listener runs one action at a time and reports busy if another
 match arrives while it is running.
+
+### Audio feedback
+
+Choose **Audio feedback…** for a trigger and add one or more local WAV clips
+of up to 15 seconds. **Play chance (%)** applies once per completed event.
+For example, 25% gives each event a one-in-four chance of playing one clip,
+chosen uniformly from the list. A setting of 0% skips clips, and 100% plays
+one whenever playback is available.
+
+Enable **Speak the action’s text response** to read a response such as the
+current time aloud with the installed Windows voice. Speech is independent of
+clip chance. When both play, the clip goes first. Choose **Apply to trigger**
+and **Save trigger**. Audio feedback works independently of the visual popup
+and uses the Windows default output. Bobo pauses recognition during playback
+so its speaker output cannot trigger another command. `--wav` is silent.
 
 The popup appears on wake detection and shows **Listening…**, then the recognized
 input. After the event completes, it stays for the cooldown period, then closes.

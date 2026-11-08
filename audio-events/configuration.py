@@ -9,6 +9,7 @@ import tempfile
 from events import EventBus, PhraseDetector
 from vocabulary import validate_vocabulary_settings
 from actions import validate_actions
+from audio_feedback import validate_audio_feedback
 
 
 def validate_config(config):
@@ -29,6 +30,7 @@ def validate_config(config):
         if not isinstance(trigger, dict):
             raise ValueError("Each trigger must be an object")
         validate_actions(trigger.get("actions", []))
+        validate_audio_feedback(trigger.get("audio_feedback", {}))
         if trigger.get("actions") and not trigger.get("capture_arguments", False):
             raise ValueError("Enable speech capture to use command actions")
         if "vocabulary" in trigger:

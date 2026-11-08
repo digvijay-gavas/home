@@ -1,0 +1,34 @@
+import subprocess
+import unittest
+from unittest.mock import Mock, patch
+
+from audio_feedback import select_audio, speak_text, validate_audio_feedback
+
+
+class AudioFeedbackTests(unittest.TestCase):
+    def test_clip_chance_and_spoken_response_are_independent(self):
+        rng = Mock()
+        rng.choice.return_value = "second.wav"
+        event = {"response": "It is noon."}
+        settings = {"clips": ["first.wav", "second.wav"], "clip_chance_percent": 25, "speak_response": True}
+        rng.random.return_value = 0.249
+        self.assertEqual(select_audio(settings, event, rng), ("second.wav", "It is noon."))
+        rng.choice.assert_called_once_with(settings["clips"])
+        rng.random.return_value = 0.25
+        self.assertEqual(select_audio(settings, event, rng), (None, "It is noon."))
+        self.assertEqual(select_audio(dict(settings, clip_chance_percent=0), {}, rng), (None, None))
+
+    def test_invalid_clip_and_probability_are_rejected(self):
+        for settings in ({"clips": ["clip.mp3"]}, {"clip_chance_percent": -1}, {"clip_chance_percent": 101},
+                         {"clip_chance_percent": float("nan")}, {"speak_response": "yes"}):
+            with self.subTest(settings=settings), self.assertRaises(ValueError):
+                validate_audio_feedback(settings)
+
+    @patch("audio_feedback.subprocess.run")
+    def test_speech_is_sent_as_plain_utf8_data(self, run):
+        text = "It’s noon. $env:Path"
+        speak_text(text)
+        args, kwargs = run.call_args
+        self.assertNotIn(text, " ".join(args[0]))
+        self.assertEqual(kwargs["input"], text.encode("utf-8"))
+        self.assertEqual(kwargs["stdout"], subprocess.DEVNULL)

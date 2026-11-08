@@ -12,6 +12,7 @@ import wave
 
 from commands import CommandDetector
 from actions import run_action
+from audio_feedback import play_clip, select_audio, speak_text
 from configuration import read_config
 from events import EventBus, words
 from event_log import EventLog, log_path
@@ -85,6 +86,10 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
     output_lock = threading.Lock()
     executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="bobo-action")
     action_slot = threading.BoundedSemaphore()
+    audio_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="bobo-playback")
+    playing = threading.Event()
+    disrupted = threading.Event()
+    config_dir = args.config.resolve().parent
 
     def emit(event):
         line = json.dumps(event)
@@ -102,6 +107,35 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
     def publish(event):
         with output_lock:
             emit(event)
+            if args.wav or stop_event.is_set():
+                return
+            trigger = next((t for t in config["triggers"] if t["id"] == event["trigger_id"]), {})
+            clip, response = select_audio(trigger.get("audio_feedback", {}), event)
+            if (clip or response) and not playing.is_set():
+                playing.set()
+                try:
+                    audio_executor.submit(play_feedback, clip, response)
+                except RuntimeError:
+                    # The action may finish as the listener shuts down.
+                    playing.clear()
+
+    def play_feedback(clip, response):
+        try:
+            if clip and not stop_event.is_set():
+                try:
+                    play_clip(config_dir / clip)
+                except Exception as error:
+                    print(f"Could not play feedback clip: {error}", file=sys.stderr)
+            if response and not stop_event.is_set():
+                try:
+                    speak_text(response)
+                except Exception as error:
+                    print(f"Could not speak feedback: {error}", file=sys.stderr)
+        finally:
+            # Allow speaker echo to fade before accepting new microphone input.
+            stop_event.wait(0.25)
+            disrupted.set()
+            playing.clear()
 
     bus.subscribe(publish)
 
@@ -145,13 +179,15 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
                 engine.feed(data)
             engine.end()
         executor.shutdown()
+        audio_executor.shutdown()
         return
 
     engine = make_engine(config, rate)
     audio = queue.Queue(maxsize=50)
-    disrupted = threading.Event()
 
     def capture(data, frames, timing, status):
+        if playing.is_set():
+            return
         if status:
             disrupted.set()
             return
@@ -190,6 +226,9 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
                             print("Trigger settings reloaded locally.", file=sys.stderr)
                     except Exception as error:
                         print(f"Settings reload skipped: {error}", file=sys.stderr)
+                if playing.is_set():
+                    stop_event.wait(0.05)
+                    continue
                 if disrupted.is_set():
                     while True:
                         try:
@@ -203,10 +242,13 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
                     data = audio.get(timeout=0.1)
                 except queue.Empty:
                     continue
-                engine.feed(data)
+                if not playing.is_set() and not disrupted.is_set():
+                    engine.feed(data)
         finally:
+            stop_event.set()
             engine.detector.cancel("listener_stopped")
             executor.shutdown(wait=False)
+            audio_executor.shutdown(wait=False, cancel_futures=True)
 
 
 if __name__ == "__main__":
