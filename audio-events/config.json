@@ -19,6 +19,12 @@
           "kind": "callback",
           "target": "current_time",
           "sentences": ["what is time", "what is the time", "what is the time now", "what time is it"]
+        },
+        {
+          "kind": "script",
+          "target": "examples/test-echo.bat",
+          "sentences": ["test echo"],
+          "speak_stdout": true
         }
       ],
       "vocabulary": {

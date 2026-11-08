@@ -88,12 +88,22 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
     action_slot = threading.BoundedSemaphore()
     audio_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="bobo-playback")
     playing = threading.Event()
+    playback_idle = threading.Event()
+    playback_idle.set()
     disrupted = threading.Event()
     wake_resume = threading.Event()
+    audio = queue.Queue(maxsize=50)
     audio_lock = threading.Lock()
     audio_slots = threading.BoundedSemaphore(8)
     pending_playback = 0
     config_dir = args.config.resolve().parent
+
+    def discard_queued_audio():
+        while True:
+            try:
+                audio.get_nowait()
+            except queue.Empty:
+                return
 
     def emit(event):
         line = json.dumps(event)
@@ -128,20 +138,28 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
             if not cue:
                 pending_playback += 1
                 playing.set()
+                playback_idle.clear()
             try:
                 return audio_executor.submit(play_feedback, clip, spoken, cue, wake)
             except RuntimeError:
-                finish_playback(cue)
+                finish_playback(cue, wake)
                 return None
 
-    def finish_playback(cue):
+    def finish_playback(cue, wake):
         nonlocal pending_playback
         # Caller holds audio_lock.
         if not cue:
+            if wake:
+                # Drop only pre-playback backlog, while capture is still
+                # paused. New command frames may arrive during decoder reset.
+                discard_queued_audio()
+                wake_resume.set()
             pending_playback -= 1
             if pending_playback == 0:
-                disrupted.set()
+                if not wake_resume.is_set():
+                    disrupted.set()
                 playing.clear()
+                playback_idle.set()
         audio_slots.release()
 
     def play_feedback(clip, spoken, cue, wake):
@@ -162,13 +180,11 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
                 except Exception as error:
                     print(f"Could not speak feedback: {error}", file=sys.stderr)
         finally:
-            if not cue:
+            if not cue and not wake:
                 # Allow speaker echo to fade before accepting new microphone input.
                 stop_event.wait(0.25)
             with audio_lock:
-                if wake:
-                    wake_resume.set()
-                finish_playback(cue)
+                finish_playback(cue, wake)
 
     def play_wake_feedback(trigger):
         settings = trigger["audio_feedback"]
@@ -253,7 +269,6 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
         return
 
     engine = make_engine(config, rate)
-    audio = queue.Queue(maxsize=50)
 
     def capture(data, frames, timing, status):
         if playing.is_set():
@@ -297,26 +312,22 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
                     except Exception as error:
                         print(f"Settings reload skipped: {error}", file=sys.stderr)
                 if playing.is_set():
-                    stop_event.wait(0.05)
+                    playback_idle.wait(0.05)
                     continue
                 if disrupted.is_set():
-                    while True:
-                        try:
-                            audio.get_nowait()
-                        except queue.Empty:
-                            break
-                    if wake_resume.is_set():
-                        wake_resume.clear()
-                        engine.resume_after_wake_feedback()
-                    else:
+                    disrupted.clear()
+                    discard_queued_audio()
+                    if not wake_resume.is_set():
                         engine.cancel()
                         print("Audio reset: discarded backlog and unfinished input.", file=sys.stderr)
-                    disrupted.clear()
+                if wake_resume.is_set():
+                    wake_resume.clear()
+                    engine.resume_after_wake_feedback()
                 try:
                     data = audio.get(timeout=0.1)
                 except queue.Empty:
                     continue
-                if not playing.is_set() and not disrupted.is_set():
+                if not playing.is_set() and not disrupted.is_set() and not wake_resume.is_set():
                     engine.feed(data)
         finally:
             stop_event.set()
