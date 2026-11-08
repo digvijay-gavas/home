@@ -29,6 +29,7 @@ class FloatingControl:
         self.pending_tab = None
         self.settings_child = None
         self.quit_deadline = 0
+        self.rendered_status = None
         root.title("Bobo · Floating control")
         root.overrideredirect(True)
         root.attributes("-topmost", True)
@@ -108,10 +109,14 @@ class FloatingControl:
             pass
 
     def show_menu(self, event):
+        if self.menu.winfo_ismapped():
+            return "break"
+        self.refresh_status()
         try:
             self.menu.tk_popup(event.x_root, event.y_root)
         finally:
             self.menu.grab_release()
+        return "break"
 
     def start(self):
         if self.running or self.starting:
@@ -144,10 +149,17 @@ class FloatingControl:
             self.child = None
             self.starting = False
         label = "Listener running" if self.running else "Starting…" if self.starting else "Listener off"
+        state = (self.running, self.starting)
+        # Reconfiguring a posted native Windows menu causes it to repaint and
+        # reset hover feedback. Poll process state freely, but render only a
+        # changed state, after the user dismisses any open menu.
+        if state == self.rendered_status or self.menu.winfo_ismapped():
+            return
         self.canvas.itemconfigure(self.dot, fill="#63dfaa" if self.running else "#e2a756")
         self.menu.entryconfigure(0, label=label)
         self.menu.entryconfigure(2, state="disabled" if self.running or self.starting else "normal")
         self.menu.entryconfigure(3, state="normal" if self.running else "disabled")
+        self.rendered_status = state
 
     def poll(self):
         try:
