@@ -7,6 +7,8 @@ import random
 import subprocess
 import wave
 
+MAX_SPEECH_CHARS = 500
+
 
 def validate_audio_feedback(settings):
     if not isinstance(settings, dict):
@@ -23,14 +25,19 @@ def validate_audio_feedback(settings):
         raise ValueError("Clip chance must be a percentage from 0 to 100")
     if type(settings.get("speak_response", False)) is not bool:
         raise ValueError("Speak response must be true or false")
+    text = settings.get("spoken_text", "")
+    if not isinstance(text, str) or len(text) > MAX_SPEECH_CHARS:
+        raise ValueError(f"Speak this text must be at most {MAX_SPEECH_CHARS} characters")
 
 
 def select_audio(settings, event, rng=random):
     clips = settings.get("clips", [])
     chance = settings.get("clip_chance_percent", 100)
     clip = rng.choice(clips) if clips and chance > 0 and rng.random() * 100 < chance else None
-    response = event.get("response") if settings.get("speak_response") else None
-    return clip, response
+    text = settings.get("spoken_text", "").strip()
+    response = (event.get("response") or "").strip() if settings.get("speak_response") else ""
+    spoken = "\n".join(part for part in (text, response[:MAX_SPEECH_CHARS]) if part)
+    return clip, spoken or None
 
 
 def play_clip(path):
@@ -45,7 +52,7 @@ def play_clip(path):
 
 def speak_text(text):
     powershell = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32/WindowsPowerShell/v1.0/powershell.exe"
-    # Pass response text through stdin, separate from the fixed PowerShell code.
+    # Pass speech through stdin, separate from the fixed PowerShell code.
     script = (
         "$ErrorActionPreference = 'Stop'; "
         "Add-Type -AssemblyName System.Speech; "
@@ -54,5 +61,5 @@ def speak_text(text):
         "try { $voice.Speak([Console]::In.ReadToEnd()) } finally { $voice.Dispose() }"
     )
     subprocess.run([str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
-                   input=text[:500].encode("utf-8"), stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                   input=text.encode("utf-8"), stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
                    check=True, timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))

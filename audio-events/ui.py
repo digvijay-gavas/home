@@ -320,12 +320,16 @@ class AudioEventsApp:
         ttk.Label(controls, text="Play chance (%)").pack(side="left", padx=(12, 5))
         ttk.Entry(controls, textvariable=chance, width=7).pack(side="left")
         speak = tk.BooleanVar(dialog, value=self.audio_feedback.get("speak_response", False))
+        ttk.Label(body, text="Speak this text on each event (optional)").pack(anchor="w", pady=(8, 3))
+        spoken_text = tk.Text(body, width=68, height=3, wrap="word", undo=True)
+        spoken_text.pack(fill="x")
+        spoken_text.insert("1.0", self.audio_feedback.get("spoken_text", ""))
         ttk.Checkbutton(body, text="Speak the action’s text response", variable=speak).pack(anchor="w", pady=8)
 
         def apply():
             try:
                 settings = {"clips": list(clips.get(0, "end")), "clip_chance_percent": float(chance.get()),
-                            "speak_response": speak.get()}
+                            "speak_response": speak.get(), "spoken_text": spoken_text.get("1.0", "end-1c").strip()}
                 validate_audio_feedback(settings)
             except ValueError as error:
                 messagebox.showerror("Check audio feedback", str(error), parent=dialog)

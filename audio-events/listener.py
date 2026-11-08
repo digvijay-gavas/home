@@ -110,25 +110,25 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
             if args.wav or stop_event.is_set():
                 return
             trigger = next((t for t in config["triggers"] if t["id"] == event["trigger_id"]), {})
-            clip, response = select_audio(trigger.get("audio_feedback", {}), event)
-            if (clip or response) and not playing.is_set():
+            clip, spoken = select_audio(trigger.get("audio_feedback", {}), event)
+            if (clip or spoken) and not playing.is_set():
                 playing.set()
                 try:
-                    audio_executor.submit(play_feedback, clip, response)
+                    audio_executor.submit(play_feedback, clip, spoken)
                 except RuntimeError:
                     # The action may finish as the listener shuts down.
                     playing.clear()
 
-    def play_feedback(clip, response):
+    def play_feedback(clip, spoken):
         try:
             if clip and not stop_event.is_set():
                 try:
                     play_clip(config_dir / clip)
                 except Exception as error:
                     print(f"Could not play feedback clip: {error}", file=sys.stderr)
-            if response and not stop_event.is_set():
+            if spoken and not stop_event.is_set():
                 try:
-                    speak_text(response)
+                    speak_text(spoken)
                 except Exception as error:
                     print(f"Could not speak feedback: {error}", file=sys.stderr)
         finally:

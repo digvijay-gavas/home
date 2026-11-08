@@ -20,9 +20,17 @@ class AudioFeedbackTests(unittest.TestCase):
 
     def test_invalid_clip_and_probability_are_rejected(self):
         for settings in ({"clips": ["clip.mp3"]}, {"clip_chance_percent": -1}, {"clip_chance_percent": 101},
-                         {"clip_chance_percent": float("nan")}, {"speak_response": "yes"}):
+                         {"clip_chance_percent": float("nan")}, {"speak_response": "yes"},
+                         {"spoken_text": "a" * 501}, {"spoken_text": None}):
             with self.subTest(settings=settings), self.assertRaises(ValueError):
                 validate_audio_feedback(settings)
+
+    def test_fixed_text_works_without_clip_or_action_and_precedes_reply(self):
+        settings = {"clips": ["clip.wav"], "clip_chance_percent": 0, "spoken_text": "  Ready.  "}
+        self.assertEqual(select_audio(settings, {}), (None, "Ready."))
+        self.assertEqual(select_audio(settings, {"response": "It is noon."}), (None, "Ready."))
+        self.assertEqual(select_audio(dict(settings, speak_response=True), {"response": "It is noon."}),
+                         (None, "Ready.\nIt is noon."))
 
     @patch("audio_feedback.subprocess.run")
     def test_speech_is_sent_as_plain_utf8_data(self, run):

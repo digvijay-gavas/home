@@ -140,9 +140,11 @@ For example, 25% gives each event a one-in-four chance of playing one clip,
 chosen uniformly from the list. A setting of 0% skips clips, and 100% plays
 one whenever playback is available.
 
-Enable **Speak the action’s text response** to read a response such as the
-current time aloud with the installed Windows voice. Speech is independent of
-clip chance. When both play, the clip goes first. Choose **Apply to trigger**
+Enter a fixed phrase under **Speak this text on each event** to hear it whenever
+the trigger emits an event. Enable **Speak the action’s text response** to also
+hear replies such as the current time. Both use the installed Windows voice and
+work independently of clip chance. When all three are configured, Bobo plays
+the selected clip first, then speaks the fixed phrase and the reply. Choose **Apply to trigger**
 and **Save trigger**. Audio feedback works independently of the visual popup
 and uses the Windows default output. Bobo pauses recognition during playback
 so its speaker output cannot trigger another command. `--wav` is silent.
