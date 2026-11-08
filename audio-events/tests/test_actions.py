@@ -16,17 +16,20 @@ class ActionTests(unittest.TestCase):
         trigger = {"id": "bobo", "phrase": "hey bobo", "event": "voice_command.received",
                    "min_confidence": 0.8, "cooldown_seconds": 2, "capture_arguments": True, "actions": [TIME_RULE]}
 
-        def recognize(tokens, source="microphone", confidence=1):
+        def recognize(tokens, source="microphone", confidence=1, wake_tail=False):
             calls = []
             detector = CommandDetector([trigger], EventBus(), source=source, on_action=lambda *args: calls.append(args))
             wake = {"result": [{"word": "hey", "end": 0.3, "conf": 1}, {"word": "bobo", "end": 0.7, "conf": 1}]}
             transcript = [{"word": word, "start": 1 + i / 10, "end": 1.1 + i / 10, "conf": confidence}
                           for i, word in enumerate(tokens.split())]
+            if wake_tail:
+                transcript.insert(0, {"word": "[unk]", "start": 0.7, "end": 0.76, "conf": 0.5})
             detector.observe(wake, transcript, 4)
             return calls
 
         for sentence in TIME_RULE["sentences"]:
             self.assertEqual(recognize(sentence)[0][0], TIME_RULE)
+        self.assertEqual(recognize("what is the time", wake_tail=True)[0][0], TIME_RULE)
         self.assertFalse(recognize("please what is the time"))
         self.assertFalse(recognize("what is the [unk] time"))
         self.assertFalse(recognize("what is the time", confidence=0.5))
@@ -49,3 +52,14 @@ class ActionTests(unittest.TestCase):
             result = run_action(rule, {"input": "run example & exit 5"}, path)
             self.assertEqual(result["status"], "ok", result)
             self.assertEqual((path / "done.txt").read_text().strip(), "ok")
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows batch interpreter")
+    def test_batch_output_streams_in_order_and_last_line_becomes_response(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            (path / "report.bat").write_text("@echo off\necho Starting.\necho Finished.\n", encoding="ascii")
+            rule = {"kind": "script", "target": "report.bat", "speak_stdout": True, "sentences": ["run example"]}
+            updates = []
+            result = run_action(rule, {}, path, on_output=updates.append)
+            self.assertEqual(updates, ["Starting.", "Finished."])
+            self.assertEqual(result, {"status": "ok", "response": "Finished."})

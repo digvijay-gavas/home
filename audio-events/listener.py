@@ -12,7 +12,7 @@ import wave
 
 from commands import CommandDetector
 from actions import run_action
-from audio_feedback import play_clip, select_audio, speak_text
+from audio_feedback import play_clip, play_wake_cue, select_audio, speak_text
 from configuration import read_config
 from events import EventBus, words
 from event_log import EventLog, log_path
@@ -89,6 +89,9 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
     audio_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="bobo-playback")
     playing = threading.Event()
     disrupted = threading.Event()
+    audio_lock = threading.Lock()
+    audio_slots = threading.BoundedSemaphore(8)
+    pending_playback = 0
     config_dir = args.config.resolve().parent
 
     def emit(event):
@@ -111,16 +114,40 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
                 return
             trigger = next((t for t in config["triggers"] if t["id"] == event["trigger_id"]), {})
             clip, spoken = select_audio(trigger.get("audio_feedback", {}), event)
-            if (clip or spoken) and not playing.is_set():
-                playing.set()
-                try:
-                    audio_executor.submit(play_feedback, clip, spoken)
-                except RuntimeError:
-                    # The action may finish as the listener shuts down.
-                    playing.clear()
+            if clip or spoken:
+                schedule_audio(clip=clip, spoken=spoken)
 
-    def play_feedback(clip, spoken):
+    def schedule_audio(clip=None, spoken=None, cue=False):
+        nonlocal pending_playback
+        if args.wav or stop_event.is_set() or not audio_slots.acquire(blocking=False):
+            return None
+        with audio_lock:
+            if not cue:
+                pending_playback += 1
+                playing.set()
+            try:
+                return audio_executor.submit(play_feedback, clip, spoken, cue)
+            except RuntimeError:
+                finish_playback(cue)
+                return None
+
+    def finish_playback(cue):
+        nonlocal pending_playback
+        # Caller holds audio_lock.
+        if not cue:
+            pending_playback -= 1
+            if pending_playback == 0:
+                disrupted.set()
+                playing.clear()
+        audio_slots.release()
+
+    def play_feedback(clip, spoken, cue):
         try:
+            if cue and not stop_event.is_set():
+                try:
+                    play_wake_cue()
+                except OSError as error:
+                    print(f"Could not play wake cue: {error}", file=sys.stderr)
             if clip and not stop_event.is_set():
                 try:
                     play_clip(config_dir / clip)
@@ -132,17 +159,37 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
                 except Exception as error:
                     print(f"Could not speak feedback: {error}", file=sys.stderr)
         finally:
-            # Allow speaker echo to fade before accepting new microphone input.
-            stop_event.wait(0.25)
-            disrupted.set()
-            playing.clear()
+            if not cue:
+                # Allow speaker echo to fade before accepting new microphone input.
+                stop_event.wait(0.25)
+            with audio_lock:
+                finish_playback(cue)
 
     bus.subscribe(publish)
 
     def on_action(rule, event, popup):
+        trigger = next((t for t in config["triggers"] if t["id"] == event["trigger_id"]), {})
+        speak_progress = trigger.get("audio_feedback", {}).get("speak_response", False)
+        last_queued = None
+        spoken_updates = 0
+
+        def progress(text):
+            nonlocal last_queued, spoken_updates
+            if popup:
+                feedback(dict(popup, phase="running", action_result=True, response=text))
+            if speak_progress and spoken_updates < 6:
+                playback = schedule_audio(spoken=text)
+                if playback is not None:
+                    last_queued = text
+                    spoken_updates += 1
+                    return playback
+            return None
+
         def complete(result):
             event["action"] = {"kind": rule["kind"], "target": rule["target"], **result}
             event["response"] = result["response"]
+            if last_queued and last_queued == event["response"]:
+                event["response_already_spoken"] = True
             if popup:
                 feedback(dict(popup, action_result=True, response=result["response"]))
             bus.publish(event)
@@ -154,7 +201,14 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
         def execute():
             try:
                 try:
-                    result = run_action(rule, event, args.config.resolve().parent)
+                    if rule.get("start_message", "").strip():
+                        playback = progress(rule["start_message"].strip())
+                        if playback is not None:
+                            playback.result()
+                    if stop_event.is_set():
+                        result = {"status": "cancelled", "response": "Listener stopped before the action started."}
+                    else:
+                        result = run_action(rule, event, config_dir, on_output=progress)
                 except Exception as error:
                     result = {"status": "error", "response": str(error)[:2000]}
                 complete(result)
@@ -168,7 +222,10 @@ def main(feedback=lambda update: None, stop_event=None, args=None):
 
     def make_engine(current, sample_rate):
         detector = CommandDetector(current["triggers"], bus, feedback, "wav" if args.wav else "microphone", on_action)
-        return RecognitionEngine(model, sample_rate, detector, debug)
+        cue = (lambda: schedule_audio(cue=True)) if not args.wav and any(
+            t.get("audio_feedback", {}).get("wake_cue") for t in current["triggers"]
+        ) else None
+        return RecognitionEngine(model, sample_rate, detector, debug, cue)
 
     if args.wav:
         with wave.open(str(args.wav), "rb") as recording:

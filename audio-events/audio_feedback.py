@@ -23,8 +23,9 @@ def validate_audio_feedback(settings):
     chance = settings.get("clip_chance_percent", 100)
     if type(chance) not in (int, float) or not math.isfinite(chance) or not 0 <= chance <= 100:
         raise ValueError("Clip chance must be a percentage from 0 to 100")
-    if type(settings.get("speak_response", False)) is not bool:
-        raise ValueError("Speak response must be true or false")
+    for field in ("speak_response", "wake_cue"):
+        if type(settings.get(field, False)) is not bool:
+            raise ValueError(f"{field} must be true or false")
     text = settings.get("spoken_text", "")
     if not isinstance(text, str) or len(text) > MAX_SPEECH_CHARS:
         raise ValueError(f"Speak this text must be at most {MAX_SPEECH_CHARS} characters")
@@ -35,7 +36,7 @@ def select_audio(settings, event, rng=random):
     chance = settings.get("clip_chance_percent", 100)
     clip = rng.choice(clips) if clips and chance > 0 and rng.random() * 100 < chance else None
     text = settings.get("spoken_text", "").strip()
-    response = (event.get("response") or "").strip() if settings.get("speak_response") else ""
+    response = (event.get("response") or "").strip() if settings.get("speak_response") and not event.get("response_already_spoken") else ""
     spoken = "\n".join(part for part in (text, response[:MAX_SPEECH_CHARS]) if part)
     return clip, spoken or None
 
@@ -48,6 +49,12 @@ def play_clip(path):
         if clip.getnframes() / clip.getframerate() > 15:
             raise ValueError("Choose a WAV clip no longer than 15 seconds")
     winsound.PlaySound(str(path), winsound.SND_FILENAME | winsound.SND_NODEFAULT)
+
+
+def play_wake_cue():
+    import winsound
+
+    winsound.Beep(880, 100)
 
 
 def speak_text(text):

@@ -31,6 +31,10 @@
           "rich client": "richclient"
         },
         "enabled": true
+      },
+      "audio_feedback": {
+        "wake_cue": true,
+        "speak_response": true
       }
     },
     {

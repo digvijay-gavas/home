@@ -32,6 +32,10 @@ class AudioFeedbackTests(unittest.TestCase):
         self.assertEqual(select_audio(dict(settings, speak_response=True), {"response": "It is noon."}),
                          (None, "Ready.\nIt is noon."))
 
+    def test_streamed_final_line_is_not_spoken_twice(self):
+        event = {"response": "Finished.", "response_already_spoken": True}
+        self.assertEqual(select_audio({"speak_response": True, "spoken_text": "Done."}, event), (None, "Done."))
+
     @patch("audio_feedback.subprocess.run")
     def test_speech_is_sent_as_plain_utf8_data(self, run):
         text = "It’s noon. $env:Path"

@@ -1,6 +1,7 @@
 """Wake recognition, open dictation, and optional trigger vocabulary decoding."""
 
 import json
+from array import array
 from collections import deque
 
 from events import words
@@ -45,11 +46,12 @@ class VocabularyStream:
 
 
 class RecognitionEngine:
-    def __init__(self, model, rate, detector, debug=lambda result: None):
+    def __init__(self, model, rate, detector, debug=lambda result: None, on_wake_cue=None):
         self.model = model
         self.rate = rate
         self.detector = detector
         self.debug = debug
+        self.on_wake_cue = on_wake_cue
         self.audio_time = 0.0
         self.needs_pre_roll = any(t.get("vocabulary", {}).get("enabled") for t in detector.triggers)
         self._reset_recognizers()
@@ -66,6 +68,20 @@ class RecognitionEngine:
         self.history = []
         self.pre_roll = deque()
         self.vocabulary = None
+        self.quiet_for = 0.0
+
+    def _maybe_cue(self, transcript):
+        active = self.detector.active
+        if not self.on_wake_cue or not active or active.get("wake_cue_sent"):
+            return
+        if not active["trigger"].get("audio_feedback", {}).get("wake_cue"):
+            return
+        elapsed = self.audio_time - active["wake_end"]
+        if elapsed > 1.2 or any(word["start"] >= active["wake_end"] - 0.08 for word in transcript):
+            active["wake_cue_sent"] = True
+        elif elapsed >= 0.35 and self.quiet_for >= 0.25:
+            active["wake_cue_sent"] = True
+            self.on_wake_cue()
 
     def _ensure_vocabulary(self, wake_words):
         if self.vocabulary is not None:
@@ -95,6 +111,10 @@ class RecognitionEngine:
     def feed(self, data):
         start = self.audio_time
         self.audio_time += len(data) / (2 * self.rate)
+        if self.on_wake_cue:
+            samples = array("h", data)
+            quiet = sum(sample * sample for sample in samples) <= len(samples) * 500**2
+            self.quiet_for = self.quiet_for + self.audio_time - start if quiet else 0.0
         if self.needs_pre_roll:
             self.pre_roll.append((start, data))
             while self.pre_roll and self.pre_roll[0][0] + len(self.pre_roll[0][1]) / (2 * self.rate) < self.audio_time - 8:
@@ -126,6 +146,8 @@ class RecognitionEngine:
         completed = self.detector.observe({"result": wake_words}, transcript, self.audio_time, pending)
         if completed:
             self._reset_recognizers()
+        else:
+            self._maybe_cue(transcript)
 
     def end(self):
         full_result, full_words = self._parse(self.full.FinalResult())

@@ -43,6 +43,11 @@ class CommandDetector:
         # Use word times, rather than searching the full transcript for the name:
         # the unrestricted decoder may spell Bobo differently.
         after_wake = [word for word in transcript if word["start"] >= session["wake_end"] - 0.08]
+        # The focused decoder starts at the wake cut. A tiny leading unknown
+        # there can be the tail of the wake word, not part of the command.
+        if (after_wake and after_wake[0]["word"] == "[unk]" and
+                after_wake[0]["end"] <= session["wake_end"] + 0.12):
+            after_wake = after_wake[1:]
         argument_words = [word for word in after_wake if word["word"] != "[unk]"]
         text = " ".join(word["word"] for word in argument_words)
         vocabulary = session["trigger"].get("vocabulary", {})

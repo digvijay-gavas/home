@@ -132,7 +132,21 @@ the action completes. Feedback displays the response when enabled for the
 trigger. The listener runs one action at a time and reports busy if another
 match arrives while it is running.
 
+Script actions can have a **Starting message** and **Success message**. The
+success message follows a zero exit code. If a script launches an application
+in the background, that exit marks the launcher's return. The application may
+still be loading. For scripts that print progress, enable **Report script echo
+lines as they arrive**. Use `@echo off` in batch scripts and `echo` the messages
+you want reported. With spoken replies enabled, Bobo reads up to six progress
+messages. The last line becomes the final response if no success message is
+configured, and an already queued final line is spoken once.
+
 ### Audio feedback
+
+Enable **Play a short cue when I pause after the wake phrase** for a brief
+tone between the wake phrase and your command. Keep speaking for a one-breath
+command. Bobo keeps the microphone open during the tone and listens for the
+command without waiting for it to finish.
 
 Choose **Audio feedback…** for a trigger and add one or more local WAV clips
 of up to 15 seconds. **Play chance (%)** applies once per completed event.

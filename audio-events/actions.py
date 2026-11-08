@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 
 from events import words
 
@@ -38,6 +39,12 @@ def validate_actions(rules):
         elif kind == "script":
             if Path(target).suffix.lower() not in (".bat", ".cmd", ".sh"):
                 raise ValueError("Choose a .bat, .cmd, or .sh script")
+            if type(rule.get("speak_stdout", False)) is not bool:
+                raise ValueError("Report script output must be true or false")
+            for field in ("start_message", "success_message"):
+                message = rule.get(field, "")
+                if not isinstance(message, str) or len(message) > 500:
+                    raise ValueError(f"{field} must be text up to 500 characters")
         else:
             raise ValueError("Command action must be a script or callback")
         if not isinstance(sentences, list) or not sentences:
@@ -79,18 +86,58 @@ def script_command(path):
     return [str(bash), "--", "./" + path.name]
 
 
-def run_action(rule, event, config_dir):
+def run_script(path, on_output):
+    process = subprocess.Popen(script_command(path), cwd=path.parent, stdin=subprocess.DEVNULL,
+                               stdout=subprocess.PIPE if on_output else subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    last = ""
+    active = threading.Event()
+    active.set()
+
+    def read_output():
+        nonlocal last
+        # The reader owns the pipe. A detached child can keep it open after the
+        # script exits, so the action worker never waits indefinitely for EOF.
+        with process.stdout as stdout:
+            while line := stdout.readline(2048):
+                if not active.is_set():
+                    break
+                # Skip the remainder of an overlong line without accumulating it.
+                if not line.endswith(b"\n") and len(line) == 2048:
+                    while (remainder := stdout.readline(2048)) and not remainder.endswith(b"\n"):
+                        pass
+                text = line.decode("utf-8", errors="replace").strip()[:500]
+                if text and active.is_set():
+                    last = text
+                    on_output(text)
+
+    reader = None
+    if on_output:
+        reader = threading.Thread(target=read_output, daemon=True, name="bobo-script-output")
+        reader.start()
+    try:
+        code = process.wait(timeout=30)
+        if reader:
+            reader.join(timeout=1)
+        return code, last
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+        raise
+    finally:
+        active.clear()
+
+
+def run_action(rule, event, config_dir, on_output=None):
     try:
         if rule["kind"] == "callback":
             return {"status": "ok", "response": str(CALLBACKS[rule["target"]](dict(event)))[:2000]}
         path = (config_dir / rule["target"]).resolve(strict=True)
         if not path.is_file() or path.suffix.lower() not in (".bat", ".cmd", ".sh"):
             raise ValueError("Action target must resolve to a script file")
-        result = subprocess.run(script_command(path), cwd=path.parent, stdin=subprocess.DEVNULL,
-                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30,
-                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        if result.returncode:
-            return {"status": "error", "response": f"Script exited with code {result.returncode}."}
-        return {"status": "ok", "response": "Script completed."}
+        code, last = run_script(path, on_output if rule.get("speak_stdout") else None)
+        if code:
+            return {"status": "error", "response": f"Script exited with code {code}."}
+        return {"status": "ok", "response": rule.get("success_message", "").strip() or last or "Script completed."}
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         return {"status": "error", "response": str(error)[:2000]}

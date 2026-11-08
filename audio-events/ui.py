@@ -320,6 +320,8 @@ class AudioEventsApp:
         ttk.Label(controls, text="Play chance (%)").pack(side="left", padx=(12, 5))
         ttk.Entry(controls, textvariable=chance, width=7).pack(side="left")
         speak = tk.BooleanVar(dialog, value=self.audio_feedback.get("speak_response", False))
+        wake_cue = tk.BooleanVar(dialog, value=self.audio_feedback.get("wake_cue", False))
+        ttk.Checkbutton(body, text="Play a short cue when I pause after the wake phrase", variable=wake_cue).pack(anchor="w")
         ttk.Label(body, text="Speak this text on each event (optional)").pack(anchor="w", pady=(8, 3))
         spoken_text = tk.Text(body, width=68, height=3, wrap="word", undo=True)
         spoken_text.pack(fill="x")
@@ -329,7 +331,8 @@ class AudioEventsApp:
         def apply():
             try:
                 settings = {"clips": list(clips.get(0, "end")), "clip_chance_percent": float(chance.get()),
-                            "speak_response": speak.get(), "spoken_text": spoken_text.get("1.0", "end-1c").strip()}
+                            "speak_response": speak.get(), "wake_cue": wake_cue.get(),
+                            "spoken_text": spoken_text.get("1.0", "end-1c").strip()}
                 validate_audio_feedback(settings)
             except ValueError as error:
                 messagebox.showerror("Check audio feedback", str(error), parent=dialog)
@@ -373,12 +376,27 @@ class AudioEventsApp:
         browse_button.pack(side="left", padx=(8, 0))
         sentences = tk.Text(body, width=64, height=6, wrap="word", undo=True)
         sentences.pack(fill="both", expand=True)
+        script_options = ttk.Frame(body)
+        script_options.pack(fill="x", pady=8)
+        script_options.columnconfigure(1, weight=1)
+        start_message, success_message = tk.StringVar(dialog), tk.StringVar(dialog)
+        messages = []
+        for row, (label, value) in enumerate((("Starting message", start_message), ("Success message", success_message))):
+            ttk.Label(script_options, text=label).grid(row=row, column=0, sticky="w", padx=(0, 8))
+            entry = ttk.Entry(script_options, textvariable=value)
+            entry.grid(row=row, column=1, sticky="ew", pady=2)
+            messages.append(entry)
+        speak_stdout = tk.BooleanVar(dialog)
+        report_output = ttk.Checkbutton(script_options, text="Report script echo lines as they arrive", variable=speak_stdout)
+        report_output.grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
         selected = None
 
         def update_kind():
             callback = kind.get() == "callback"
             targets.configure(state="readonly" if callback else "normal", values=tuple(CALLBACKS) if callback else ())
             browse_button.configure(state="disabled" if callback else "normal")
+            for widget in (*messages, report_output):
+                widget.configure(state="disabled" if callback else "normal")
 
         def change_kind(_):
             target.set("current_time" if kind.get() == "callback" else "")
@@ -400,13 +418,22 @@ class AudioEventsApp:
                 groups.selection_set(index)
             kind.set(rule["kind"])
             target.set(rule["target"])
+            start_message.set(rule.get("start_message", ""))
+            success_message.set(rule.get("success_message", ""))
+            speak_stdout.set(rule.get("speak_stdout", False))
             sentences.delete("1.0", "end")
             sentences.insert("1.0", "\n".join(rule["sentences"]))
             update_kind()
 
         def form():
-            return {"kind": kind.get(), "target": target.get().strip(),
+            rule = {"kind": kind.get(), "target": target.get().strip(),
                     "sentences": [line.strip() for line in sentences.get("1.0", "end-1c").splitlines() if line.strip()]}
+            if kind.get() == "script":
+                for key, value in (("start_message", start_message.get().strip()),
+                                   ("success_message", success_message.get().strip()), ("speak_stdout", speak_stdout.get())):
+                    if value:
+                        rule[key] = value
+            return rule
 
         def update_group():
             candidate = list(rules)
