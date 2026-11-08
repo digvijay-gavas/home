@@ -2,7 +2,7 @@ import subprocess
 import unittest
 from unittest.mock import Mock, patch
 
-from audio_feedback import select_audio, speak_text, validate_audio_feedback
+from audio_feedback import select_response, select_wake_audio, speak_text, validate_audio_feedback
 
 
 class AudioFeedbackTests(unittest.TestCase):
@@ -12,11 +12,12 @@ class AudioFeedbackTests(unittest.TestCase):
         event = {"response": "It is noon."}
         settings = {"clips": ["first.wav", "second.wav"], "clip_chance_percent": 25, "speak_response": True}
         rng.random.return_value = 0.249
-        self.assertEqual(select_audio(settings, event, rng), ("second.wav", "It is noon."))
+        self.assertEqual(select_wake_audio(settings, rng), ("second.wav", None))
+        self.assertEqual(select_response(settings, event), "It is noon.")
         rng.choice.assert_called_once_with(settings["clips"])
         rng.random.return_value = 0.25
-        self.assertEqual(select_audio(settings, event, rng), (None, "It is noon."))
-        self.assertEqual(select_audio(dict(settings, clip_chance_percent=0), {}, rng), (None, None))
+        self.assertEqual(select_wake_audio(settings, rng), (None, None))
+        self.assertEqual(select_wake_audio(dict(settings, clip_chance_percent=0), rng), (None, None))
 
     def test_invalid_clip_and_probability_are_rejected(self):
         for settings in ({"clips": ["clip.mp3"]}, {"clip_chance_percent": -1}, {"clip_chance_percent": 101},
@@ -25,16 +26,15 @@ class AudioFeedbackTests(unittest.TestCase):
             with self.subTest(settings=settings), self.assertRaises(ValueError):
                 validate_audio_feedback(settings)
 
-    def test_fixed_text_works_without_clip_or_action_and_precedes_reply(self):
+    def test_fixed_text_is_reserved_for_the_wake_stage(self):
         settings = {"clips": ["clip.wav"], "clip_chance_percent": 0, "spoken_text": "  Ready.  "}
-        self.assertEqual(select_audio(settings, {}), (None, "Ready."))
-        self.assertEqual(select_audio(settings, {"response": "It is noon."}), (None, "Ready."))
-        self.assertEqual(select_audio(dict(settings, speak_response=True), {"response": "It is noon."}),
-                         (None, "Ready.\nIt is noon."))
+        self.assertEqual(select_wake_audio(settings), (None, "Ready."))
+        self.assertIsNone(select_response(settings, {"response": "It is noon."}))
+        self.assertEqual(select_response(dict(settings, speak_response=True), {"response": "It is noon."}), "It is noon.")
 
     def test_streamed_final_line_is_not_spoken_twice(self):
         event = {"response": "Finished.", "response_already_spoken": True}
-        self.assertEqual(select_audio({"speak_response": True, "spoken_text": "Done."}, event), (None, "Done."))
+        self.assertIsNone(select_response({"speak_response": True, "spoken_text": "Done."}, event))
 
     @patch("audio_feedback.subprocess.run")
     def test_speech_is_sent_as_plain_utf8_data(self, run):

@@ -63,3 +63,17 @@ class ActionTests(unittest.TestCase):
             result = run_action(rule, {}, path, on_output=updates.append)
             self.assertEqual(updates, ["Starting.", "Finished."])
             self.assertEqual(result, {"status": "ok", "response": "Finished."})
+
+    def test_python_protocol_uses_runnable_messages_and_exit_status(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            script = path / "report.py"
+            script.write_text("print('ordinary log')\nprint('BOBO:START:Starting.')\n"
+                              "print('BOBO:START:Duplicate.')\nprint('BOBO:FINAL:Could not finish.')\n"
+                              "raise SystemExit(3)\n", encoding="utf-8")
+            rule = {"kind": "script", "target": script.name, "sentences": ["run example"]}
+            updates = []
+            validate_actions([rule])
+            result = run_action(rule, {}, path, on_output=updates.append)
+            self.assertEqual(updates, ["Starting."])
+            self.assertEqual(result, {"status": "error", "response": "Could not finish."})

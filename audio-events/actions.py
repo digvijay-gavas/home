@@ -17,6 +17,7 @@ def current_time(_event):
 
 
 CALLBACKS = {"current_time": current_time}
+SCRIPT_SUFFIXES = (".bat", ".cmd", ".sh", ".py", ".js")
 
 
 def sentence_key(sentence):
@@ -37,8 +38,8 @@ def validate_actions(rules):
             if target not in CALLBACKS:
                 raise ValueError(f"Unknown callback {target!r}")
         elif kind == "script":
-            if Path(target).suffix.lower() not in (".bat", ".cmd", ".sh"):
-                raise ValueError("Choose a .bat, .cmd, or .sh script")
+            if Path(target).suffix.lower() not in SCRIPT_SUFFIXES:
+                raise ValueError("Choose a .bat, .cmd, .sh, .py, or .js script")
             if type(rule.get("speak_stdout", False)) is not bool:
                 raise ValueError("Report script output must be true or false")
             for field in ("start_message", "success_message"):
@@ -65,7 +66,18 @@ def match_action(trigger, text):
 
 
 def script_command(path):
-    if path.suffix.lower() in (".bat", ".cmd"):
+    suffix = path.suffix.lower()
+    if suffix == ".py":
+        python = Path(sys.executable)
+        if python.name.lower() == "pythonw.exe":
+            python = python.with_name("python.exe")
+        return [str(python), "-u", "-X", "utf8", str(path)]
+    if suffix == ".js":
+        node = shutil.which("node.exe" if sys.platform == "win32" else "node")
+        if not node:
+            raise ValueError("Put Node.js on PATH to run .js scripts")
+        return [node, str(path)]
+    if suffix in (".bat", ".cmd"):
         if sys.platform != "win32":
             raise ValueError("Batch scripts require Windows")
         # Pass only a fixed basename to cmd.exe. The directory is passed as cwd,
@@ -86,16 +98,18 @@ def script_command(path):
     return [str(bash), "--", "./" + path.name]
 
 
-def run_script(path, on_output):
+def run_script(path, on_output, report_plain_output=False):
     process = subprocess.Popen(script_command(path), cwd=path.parent, stdin=subprocess.DEVNULL,
-                               stdout=subprocess.PIPE if on_output else subprocess.DEVNULL,
+                               stdout=subprocess.PIPE,
                                stderr=subprocess.DEVNULL, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     last = ""
+    final = ""
     active = threading.Event()
     active.set()
 
     def read_output():
-        nonlocal last
+        nonlocal last, final
+        started = False
         # The reader owns the pipe. A detached child can keep it open after the
         # script exits, so the action worker never waits indefinitely for EOF.
         with process.stdout as stdout:
@@ -107,19 +121,27 @@ def run_script(path, on_output):
                     while (remainder := stdout.readline(2048)) and not remainder.endswith(b"\n"):
                         pass
                 text = line.decode("utf-8", errors="replace").strip()[:500]
-                if text and active.is_set():
+                if not text or not active.is_set() or final:
+                    continue
+                if text.startswith("BOBO:FINAL:"):
+                    final = text.removeprefix("BOBO:FINAL:").strip()
+                elif text.startswith("BOBO:START:"):
+                    message = text.removeprefix("BOBO:START:").strip()
+                    if message and not started:
+                        started = True
+                        if on_output:
+                            on_output(message)
+                elif report_plain_output:
                     last = text
-                    on_output(text)
+                    if on_output:
+                        on_output(text)
 
-    reader = None
-    if on_output:
-        reader = threading.Thread(target=read_output, daemon=True, name="bobo-script-output")
-        reader.start()
+    reader = threading.Thread(target=read_output, daemon=True, name="bobo-script-output")
+    reader.start()
     try:
         code = process.wait(timeout=30)
-        if reader:
-            reader.join(timeout=1)
-        return code, last
+        reader.join(timeout=1)
+        return code, final, last
     except subprocess.TimeoutExpired:
         process.kill()
         process.wait()
@@ -133,11 +155,11 @@ def run_action(rule, event, config_dir, on_output=None):
         if rule["kind"] == "callback":
             return {"status": "ok", "response": str(CALLBACKS[rule["target"]](dict(event)))[:2000]}
         path = (config_dir / rule["target"]).resolve(strict=True)
-        if not path.is_file() or path.suffix.lower() not in (".bat", ".cmd", ".sh"):
+        if not path.is_file() or path.suffix.lower() not in SCRIPT_SUFFIXES:
             raise ValueError("Action target must resolve to a script file")
-        code, last = run_script(path, on_output if rule.get("speak_stdout") else None)
+        code, final, last = run_script(path, on_output, rule.get("speak_stdout", False))
         if code:
-            return {"status": "error", "response": f"Script exited with code {code}."}
-        return {"status": "ok", "response": rule.get("success_message", "").strip() or last or "Script completed."}
+            return {"status": "error", "response": final or f"Script exited with code {code}."}
+        return {"status": "ok", "response": final or rule.get("success_message", "").strip() or last or "Script completed."}
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         return {"status": "error", "response": str(error)[:2000]}

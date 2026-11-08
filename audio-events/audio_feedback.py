@@ -31,14 +31,16 @@ def validate_audio_feedback(settings):
         raise ValueError(f"Speak this text must be at most {MAX_SPEECH_CHARS} characters")
 
 
-def select_audio(settings, event, rng=random):
+def select_wake_audio(settings, rng=random):
     clips = settings.get("clips", [])
     chance = settings.get("clip_chance_percent", 100)
     clip = rng.choice(clips) if clips and chance > 0 and rng.random() * 100 < chance else None
-    text = settings.get("spoken_text", "").strip()
+    return clip, settings.get("spoken_text", "").strip() or None
+
+
+def select_response(settings, event):
     response = (event.get("response") or "").strip() if settings.get("speak_response") and not event.get("response_already_spoken") else ""
-    spoken = "\n".join(part for part in (text, response[:MAX_SPEECH_CHARS]) if part)
-    return clip, spoken or None
+    return response[:MAX_SPEECH_CHARS] or None
 
 
 def play_clip(path):

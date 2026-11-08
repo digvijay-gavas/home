@@ -293,8 +293,8 @@ class AudioEventsApp:
         dialog.transient(self.root)
         body = ttk.Frame(dialog, padding=18)
         body.pack(fill="both", expand=True)
-        ttk.Label(body, text="Bobo picks one clip at random when a completed event passes the chance check.\n"
-                  "Choose short WAV clips up to 15 seconds.", justify="left").pack(anchor="w", pady=(0, 8))
+        ttk.Label(body, text="Bobo can play one random WAV and speak a phrase when you pause after the wake word.\n"
+                  "Choose WAV clips up to 15 seconds and wait for playback before speaking.", justify="left").pack(anchor="w", pady=(0, 8))
         clips = tk.Listbox(body, width=68, height=6, selectmode="extended")
         clips.pack(fill="both", expand=True)
         for path in self.audio_feedback.get("clips", []):
@@ -321,8 +321,8 @@ class AudioEventsApp:
         ttk.Entry(controls, textvariable=chance, width=7).pack(side="left")
         speak = tk.BooleanVar(dialog, value=self.audio_feedback.get("speak_response", False))
         wake_cue = tk.BooleanVar(dialog, value=self.audio_feedback.get("wake_cue", False))
-        ttk.Checkbutton(body, text="Play a short cue when I pause after the wake phrase", variable=wake_cue).pack(anchor="w")
-        ttk.Label(body, text="Speak this text on each event (optional)").pack(anchor="w", pady=(8, 3))
+        ttk.Checkbutton(body, text="Play wake feedback when I pause after the wake phrase", variable=wake_cue).pack(anchor="w")
+        ttk.Label(body, text="Speak this text before taking the command (optional)").pack(anchor="w", pady=(8, 3))
         spoken_text = tk.Text(body, width=68, height=3, wrap="word", undo=True)
         spoken_text.pack(fill="x")
         spoken_text.insert("1.0", self.audio_feedback.get("spoken_text", ""))
@@ -368,7 +368,7 @@ class AudioEventsApp:
         targets.pack(side="left", fill="x", expand=True)
 
         def browse():
-            path = filedialog.askopenfilename(parent=dialog, filetypes=[("Command scripts", "*.bat *.cmd *.sh")])
+            path = filedialog.askopenfilename(parent=dialog, filetypes=[("Command scripts", "*.bat *.cmd *.sh *.py *.js")])
             if path:
                 target.set(path)
 
@@ -381,7 +381,7 @@ class AudioEventsApp:
         script_options.columnconfigure(1, weight=1)
         start_message, success_message = tk.StringVar(dialog), tk.StringVar(dialog)
         messages = []
-        for row, (label, value) in enumerate((("Starting message", start_message), ("Success message", success_message))):
+        for row, (label, value) in enumerate((("Extra pre-launch message", start_message), ("Fallback success message", success_message))):
             ttk.Label(script_options, text=label).grid(row=row, column=0, sticky="w", padx=(0, 8))
             entry = ttk.Entry(script_options, textvariable=value)
             entry.grid(row=row, column=1, sticky="ew", pady=2)

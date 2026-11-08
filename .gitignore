@@ -17,5 +17,6 @@ audio-events/*.jsonl
 audio-events/*.events.sqlite3*
 audio-events/*.controls.json
 audio-events/test-audio/
+audio-events/local-actions/
 lan-desktop/diagnostics*.xml
 lan-desktop/diagnostics*.json

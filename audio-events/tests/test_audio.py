@@ -48,7 +48,7 @@ class AudioTests(unittest.TestCase):
         for name, expected in (("paused", 1), ("continuous", 0)):
             with self.subTest(name=name):
                 cues = []
-                events, _ = self.recognize(name, [trigger], lambda: cues.append(True))
+                events, _ = self.recognize(name, [trigger], lambda _: cues.append(True))
                 self.assertEqual(len(cues), expected)
                 self.assertEqual([event["input"] for event in events], ["what is the time now"])
 

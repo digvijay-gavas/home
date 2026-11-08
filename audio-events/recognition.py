@@ -81,7 +81,19 @@ class RecognitionEngine:
             active["wake_cue_sent"] = True
         elif elapsed >= 0.35 and self.quiet_for >= 0.25:
             active["wake_cue_sent"] = True
-            self.on_wake_cue()
+            self.on_wake_cue(active["trigger"])
+
+    def resume_after_wake_feedback(self):
+        active = self.detector.active
+        if not active:
+            return
+        active["wake_end"] = self.audio_time
+        active["last_word_end"] = None
+        self._reset_recognizers()
+        # The session has already matched, so start its vocabulary decoder
+        # directly instead of waiting for a second wake phrase.
+        if active["trigger"].get("vocabulary", {}).get("enabled"):
+            self.vocabulary = VocabularyStream(self.model, self.rate, trigger_vocabulary(active["trigger"]), self.audio_time)
 
     def _ensure_vocabulary(self, wake_words):
         if self.vocabulary is not None:

@@ -119,9 +119,10 @@ to get the computer's local time in the feedback popup and Event log. To add
 another Python callback, register a function that accepts the event dictionary
 and returns response text in `CALLBACKS` in `actions.py`.
 
-Scripts can be `.bat`, `.cmd`, or `.sh`. Relative paths start beside the config
+Scripts can be `.bat`, `.cmd`, `.sh`, `.py`, or `.js`. Relative paths start beside the config
 file. Scripts run from their own folder, with a 30-second timeout and no speech
-arguments. Windows `.sh` support uses Bash from Git for Windows. Use trusted
+arguments. Python uses Bobo's interpreter. JavaScript requires Node.js on PATH.
+Windows `.sh` support uses Bash from Git for Windows. Use trusted
 scripts because a matching voice command runs them with your account's access.
 
 Actions require an exact match of the complete captured command after aliases,
@@ -132,36 +133,36 @@ the action completes. Feedback displays the response when enabled for the
 trigger. The listener runs one action at a time and reports busy if another
 match arrives while it is running.
 
-Script actions can have a **Starting message** and **Success message**. The
-success message follows a zero exit code. If a script launches an application
-in the background, that exit marks the launcher's return. The application may
-still be loading. For scripts that print progress, enable **Report script echo
-lines as they arrive**. Use `@echo off` in batch scripts and `echo` the messages
-you want reported. With spoken replies enabled, Bobo reads up to six progress
-messages. The last line becomes the final response if no success message is
-configured, and an already queued final line is spoken once.
+Use `BOBO:START:Opening application.` on stdout for the immediate reply and
+`BOBO:FINAL:Application launcher finished.` for the final reply. Print each on
+its own line with `echo`, `print(..., flush=True)`, or `console.log(...)`.
+Bobo reads START as it arrives and reports FINAL after the script exits. The
+exit code records success or failure, and Bobo supplies a final message when
+the script omits one. A background launcher may exit while the app is loading.
+Enable **Report script echo lines as they arrive** to also report ordinary
+stdout lines. **Extra pre-launch message** is useful for scripts that do not
+provide START. **Fallback success message** overrides the generic success text.
 
 ### Audio feedback
 
-Enable **Play a short cue when I pause after the wake phrase** for a brief
-tone between the wake phrase and your command. Keep speaking for a one-breath
-command. Bobo keeps the microphone open during the tone and listens for the
-command without waiting for it to finish.
+Enable **Play wake feedback when I pause after the wake phrase**, then pause
+after saying the wake phrase. Bobo can play a selected WAV followed by fixed
+spoken text. With neither configured, it plays a short tone. In a one-breath
+command, Bobo skips the wake feedback and captures the command as you speak.
 
 Choose **Audio feedback…** for a trigger and add one or more local WAV clips
-of up to 15 seconds. **Play chance (%)** applies once per completed event.
-For example, 25% gives each event a one-in-four chance of playing one clip,
+of up to 15 seconds. **Play chance (%)** applies once at the wake stage.
+For example, 25% gives each paused wake a one-in-four chance of playing one clip,
 chosen uniformly from the list. A setting of 0% skips clips, and 100% plays
 one whenever playback is available.
 
-Enter a fixed phrase under **Speak this text on each event** to hear it whenever
-the trigger emits an event. Enable **Speak the action’s text response** to also
-hear replies such as the current time. Both use the installed Windows voice and
-work independently of clip chance. When all three are configured, Bobo plays
-the selected clip first, then speaks the fixed phrase and the reply. Choose **Apply to trigger**
-and **Save trigger**. Audio feedback works independently of the visual popup
-and uses the Windows default output. Bobo pauses recognition during playback
-so its speaker output cannot trigger another command. `--wav` is silent.
+Enter a fixed phrase under **Speak this text before taking the command**. After
+the clip and fixed phrase, the full input timeout begins. Enable **Speak the
+action’s text response** to hear the action's separate replies. Both use the
+installed Windows voice and work independently of clip chance. Choose **Apply
+to trigger** and **Save trigger**. Audio feedback works independently of the
+visual popup and uses the Windows default output. Bobo pauses recognition
+during clip and speech playback to reduce speaker feedback. `--wav` is silent.
 
 The popup appears on wake detection and shows **Listening…**, then the recognized
 input. After the event completes, it stays for the cooldown period, then closes.
