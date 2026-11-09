@@ -23,8 +23,7 @@
         {
           "kind": "script",
           "target": "examples/test-echo.bat",
-          "sentences": ["test echo"],
-          "speak_stdout": true
+          "sentences": ["test echo"]
         }
       ],
       "vocabulary": {

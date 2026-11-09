@@ -393,16 +393,13 @@ class AudioEventsApp:
             entry = ttk.Entry(script_options, textvariable=value)
             entry.grid(row=row, column=1, sticky="ew", pady=2)
             messages.append(entry)
-        speak_stdout = tk.BooleanVar(dialog)
-        report_output = ttk.Checkbutton(script_options, text="Report script echo lines as they arrive", variable=speak_stdout)
-        report_output.grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
         selected = None
 
         def update_kind():
             callback = kind.get() == "callback"
             targets.configure(state="readonly" if callback else "normal", values=tuple(CALLBACKS) if callback else ())
             browse_button.configure(state="disabled" if callback else "normal")
-            for widget in (*messages, report_output):
+            for widget in messages:
                 widget.configure(state="disabled" if callback else "normal")
 
         def change_kind(_):
@@ -427,7 +424,6 @@ class AudioEventsApp:
             target.set(rule["target"])
             start_message.set(rule.get("start_message", ""))
             success_message.set(rule.get("success_message", ""))
-            speak_stdout.set(rule.get("speak_stdout", False))
             sentences.delete("1.0", "end")
             sentences.insert("1.0", "\n".join(rule["sentences"]))
             update_kind()
@@ -437,7 +433,7 @@ class AudioEventsApp:
                     "sentences": [line.strip() for line in sentences.get("1.0", "end-1c").splitlines() if line.strip()]}
             if kind.get() == "script":
                 for key, value in (("start_message", start_message.get().strip()),
-                                   ("success_message", success_message.get().strip()), ("speak_stdout", speak_stdout.get())):
+                                   ("success_message", success_message.get().strip())):
                     if value:
                         rule[key] = value
             return rule

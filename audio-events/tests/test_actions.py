@@ -54,21 +54,22 @@ class ActionTests(unittest.TestCase):
             self.assertEqual((path / "done.txt").read_text().strip(), "ok")
 
     @unittest.skipUnless(sys.platform == "win32", "Windows batch interpreter")
-    def test_batch_output_streams_in_order_and_last_line_becomes_response(self):
+    def test_batch_only_speaks_tagged_lines_even_with_legacy_echo_option(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)
-            (path / "report.bat").write_text("@echo off\necho Starting.\necho Finished.\n", encoding="ascii")
+            (path / "report.bat").write_text("@echo off\necho BOBO:Start:Starting.\necho Ordinary log.\n"
+                                             "echo BOBO:Final:Finished.\n", encoding="ascii")
             rule = {"kind": "script", "target": "report.bat", "speak_stdout": True, "sentences": ["run example"]}
             updates = []
             result = run_action(rule, {}, path, on_output=updates.append)
-            self.assertEqual(updates, ["Starting.", "Finished."])
+            self.assertEqual(updates, ["Starting."])
             self.assertEqual(result, {"status": "ok", "response": "Finished."})
 
     def test_python_protocol_uses_runnable_messages_and_exit_status(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)
             script = path / "report.py"
-            script.write_text("print('ordinary log')\nprint('BOBO:START:Starting.')\n"
+            script.write_text("print('ordinary log')\nprint('  BOBO:START:Indented log')\nprint('BOBO:START:Starting.')\n"
                               "print('BOBO:START:Duplicate.')\nprint('BOBO:FINAL:Could not finish.')\n"
                               "raise SystemExit(3)\n", encoding="utf-8")
             rule = {"kind": "script", "target": script.name, "sentences": ["run example"]}
@@ -77,3 +78,12 @@ class ActionTests(unittest.TestCase):
             result = run_action(rule, {}, path, on_output=updates.append)
             self.assertEqual(updates, ["Starting."])
             self.assertEqual(result, {"status": "error", "response": "Could not finish."})
+
+    def test_plain_output_does_not_replace_the_completion_fallback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            (path / "report.py").write_text("print('This should stay silent.')\n", encoding="utf-8")
+            rule = {"kind": "script", "target": "report.py", "sentences": ["run example"], "speak_stdout": True}
+            updates = []
+            self.assertEqual(run_action(rule, {}, path, updates.append), {"status": "ok", "response": "Script completed."})
+            self.assertEqual(updates, [])

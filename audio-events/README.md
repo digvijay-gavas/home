@@ -133,18 +133,18 @@ the action completes. Feedback displays the response when enabled for the
 trigger. The listener runs one action at a time and reports busy if another
 match arrives while it is running.
 
-Use `BOBO:START:Opening application.` on stdout for the immediate reply and
-`BOBO:FINAL:Application launcher finished.` for the final reply. Print each on
+Use `BOBO:Start:Opening application.` on stdout for the immediate reply and
+`BOBO:Final:Application launcher finished.` for the final reply. Print each on
 its own line with `echo`, `print(..., flush=True)`, or `console.log(...)`.
 Bobo reads START as it arrives and reports FINAL after the script exits. The
 exit code records success or failure, and Bobo supplies a final message when
 the script omits one. A background launcher may exit while the app is loading.
-Enable **Report script echo lines as they arrive** to also report ordinary
-stdout lines. **Extra pre-launch message** is useful for scripts that do not
-provide START. **Fallback success message** overrides the generic success text.
+The tag must start the line and is case-insensitive. Ordinary stdout stays
+silent. **Extra pre-launch message** is useful for scripts that do not provide
+START. **Fallback success message** overrides the generic success text.
 
-Say **“Hey Bobo, test echo”** to try all three message types. The included
-batch file prints START, an ordinary progress line, and FINAL, then exits.
+Say **“Hey Bobo, test echo”** to check the filter. The batch file prints START,
+an ordinary log line, and FINAL. You hear only the two tagged replies.
 
 ### Audio feedback
 
